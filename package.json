@@ -1,0 +1,23 @@
+{
+  "name": "vault-kb",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local read-only MCP server for AI-accessible Obsidian notes.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "ingest": "node src/index.js --ingest-only",
+    "inspect-config": "node src/index.js --print-config",
+    "smoke": "node src/smoke-test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "better-sqlite3": "^12.8.0",
+    "fast-glob": "^3.3.3",
+    "gray-matter": "^4.0.3",
+    "zod": "^4.3.6"
+  }
+}

@@ -67,8 +67,8 @@ Then in your vault's `.mcp.json`:
 ### Windows quick setup
 
 ```powershell
-git clone https://github.com/MinhQuangVu0101/vault-kb.git C:\Users\YOU\Documents\dev\vault-kb
-cd C:\Users\YOU\Documents\dev\vault-kb
+git clone https://github.com/MinhQuangVu0101/vault-kb.git C:\code\vault-kb
+cd C:\code\vault-kb
 npm install
 setx VAULT_KB_VAULT_PATH "C:\Users\YOU\Documents\obsidian-vault"
 ```
@@ -80,7 +80,7 @@ Restart your terminal so the env var takes effect. Then in your vault's `.mcp.js
   "mcpServers": {
     "vault-kb": {
       "command": "node",
-      "args": ["C:\\Users\\YOU\\Documents\\dev\\vault-kb\\src\\index.js"]
+      "args": ["C:\\code\\vault-kb\\src\\index.js"]
     }
   }
 }

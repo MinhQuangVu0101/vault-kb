@@ -21,19 +21,27 @@ function formatList(rows) {
     const tags = row.tags_text ? `tags: ${row.tags_text}` : "tags: -";
     const meta = [row.type || "-", row.area || "-", row.status || "-", row.updated || "-"].join(" | ");
     const excerpt = row.snippet || row.excerpt || "";
+    const backlinks = typeof row.backlinkCount === "number" ? `backlinks: ${row.backlinkCount}` : null;
 
     return [
       `${index + 1}. ${row.title}`,
       `path: ${row.path}`,
       `meta: ${meta}`,
       tags,
+      backlinks,
       excerpt ? `excerpt: ${excerpt}` : "excerpt: -",
-    ].join("\n");
+    ].filter(Boolean).join("\n");
   }).join("\n\n");
 }
 
 function formatReadResult(note) {
-  return [
+  const backlinkLines = (note.backlinks ?? []).slice(0, 20).map((b) => `  - ${b.path} — ${b.title ?? ""}`);
+  const outlinkLines = (note.outlinks ?? []).slice(0, 20).map((o) => {
+    if (o.unresolved) return `  - [[${o.raw}]] (unresolved)`;
+    return `  - ${o.path} — ${o.title ?? ""}`;
+  });
+
+  const parts = [
     `title: ${note.title}`,
     `path: ${note.path}`,
     `area: ${note.area || "-"}`,
@@ -42,9 +50,13 @@ function formatReadResult(note) {
     `updated: ${note.updated || "-"}`,
     `tags: ${note.tags_text || "-"}`,
     `truncated: ${note.truncated ? `yes (${note.maxChars} chars)` : "no"}`,
-    "",
-    note.rawContent,
-  ].join("\n");
+  ];
+  if (backlinkLines.length) parts.push(`backlinks (${note.backlinks.length}):`, ...backlinkLines);
+  else parts.push("backlinks: none");
+  if (outlinkLines.length) parts.push(`outlinks (${note.outlinks.length}):`, ...outlinkLines);
+  else parts.push("outlinks: none");
+  parts.push("", note.rawContent);
+  return parts.join("\n");
 }
 
 function toolText(text) {

@@ -9,6 +9,7 @@ import { createLogger } from "./logger.js";
 import { createStats } from "./stats.js";
 import { VaultIndex } from "./vault-index.js";
 import { createWatcher } from "./watcher.js";
+import { runBulkUpdate } from "./bulk.js";
 
 function formatList(rows) {
   if (rows.length === 0) {
@@ -163,6 +164,33 @@ server.registerTool("kb_ingest", {
     `skipped: missingAccess=${report.skipped.missingAccess}, explicitFalse=${report.skipped.explicitFalse}, hardExcluded=${report.skipped.hardExcluded}, parseError=${report.skipped.parseError}`,
     `indexedAt: ${report.indexedAt}`,
   ].join("\n"));
+}));
+
+server.registerTool("kb_bulk_update", {
+  title: "Bulk update note frontmatter",
+  description: "Match notes by folder/tag/frontmatter/paths and apply frontmatter ops (addTags, removeTags, setFields, unsetFields, setAccess). Dry-run unless apply=true. Writes a revert bundle when applied.",
+  inputSchema: {
+    match: z.object({
+      folder: z.string().optional(),
+      tag: z.string().optional(),
+      frontmatter: z.record(z.string(), z.any()).optional(),
+      paths: z.array(z.string()).optional(),
+    }).optional(),
+    ops: z.object({
+      addTags: z.array(z.string()).optional(),
+      removeTags: z.array(z.string()).optional(),
+      setFields: z.record(z.string(), z.any()).optional(),
+      unsetFields: z.array(z.string()).optional(),
+      setAccess: z.boolean().optional(),
+    }),
+    apply: z.boolean().optional(),
+  },
+}, wrapTool("kb_bulk_update", async ({ match, ops, apply }) => {
+  const result = runBulkUpdate({ config, match, ops, apply: Boolean(apply), logger });
+  if (apply && result.matched > 0) {
+    for (const { path: p } of result.changes) vaultIndex.ingestOne(p);
+  }
+  return toolText(JSON.stringify(result, null, 2));
 }));
 
 server.registerTool("kb_stats", {

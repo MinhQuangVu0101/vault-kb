@@ -45,8 +45,8 @@ The env var takes precedence when both are set. `indexPath` and `hardExcludedFol
 ### Mac quick setup
 
 ```bash
-git clone https://github.com/MinhQuangVu0101/vault-kb.git ~/Code/vault-kb
-cd ~/Code/vault-kb && npm install
+git clone https://github.com/MinhQuangVu0101/vault-kb.git ~/Documents/dev/vault-kb
+cd ~/Documents/dev/vault-kb && npm install
 echo 'export VAULT_KB_VAULT_PATH="$HOME/Documents/obsidian-vault"' >> ~/.zshrc
 source ~/.zshrc
 ```
@@ -58,7 +58,29 @@ Then in your vault's `.mcp.json`:
   "mcpServers": {
     "vault-kb": {
       "command": "node",
-      "args": ["/Users/YOU/Code/vault-kb/src/index.js"]
+      "args": ["/Users/YOU/Documents/dev/vault-kb/src/index.js"]
+    }
+  }
+}
+```
+
+### Windows quick setup
+
+```powershell
+git clone https://github.com/MinhQuangVu0101/vault-kb.git C:\Users\YOU\Documents\dev\vault-kb
+cd C:\Users\YOU\Documents\dev\vault-kb
+npm install
+setx VAULT_KB_VAULT_PATH "C:\Users\YOU\Documents\obsidian-vault"
+```
+
+Restart your terminal so the env var takes effect. Then in your vault's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "vault-kb": {
+      "command": "node",
+      "args": ["C:\\Users\\YOU\\Documents\\dev\\vault-kb\\src\\index.js"]
     }
   }
 }

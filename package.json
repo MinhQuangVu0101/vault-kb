@@ -2,7 +2,7 @@
   "name": "vault-kb",
   "version": "0.1.0",
   "private": true,
-  "description": "Local read-only MCP server for AI-accessible Obsidian notes.",
+  "description": "Local MCP server for AI-accessible Obsidian notes: search, read, list, ingest, bulk edit.",
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
@@ -10,7 +10,8 @@
     "inspect-config": "node src/index.js --print-config",
     "smoke": "node src/smoke-test.js",
     "test": "node --test 'test/*.test.js'",
-    "regression": "node scripts/regression-harness.js"
+    "regression": "node scripts/regression-harness.js",
+    "bulk": "node scripts/bulk.js"
   },
   "engines": {
     "node": ">=20"

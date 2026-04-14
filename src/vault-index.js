@@ -92,8 +92,10 @@ function ensureDirForFile(filePath) {
 }
 
 export class VaultIndex {
-  constructor(config) {
+  constructor(config, { logger = null, stats = null } = {}) {
     this.config = config;
+    this.logger = logger;
+    this.stats = stats;
     ensureDirForFile(config.indexPath);
     this.db = new Database(config.indexPath);
     this.db.pragma("journal_mode = WAL");
@@ -220,13 +222,14 @@ export class VaultIndex {
       onlyFiles: true,
       dot: true,
       unique: true,
-      ignore: this.config.hardExcludedFolders.flatMap((folder) => [
-        folder,
-        `${folder}/**`,
-      ]),
     });
 
-    let skippedWithoutAccess = 0;
+    const skipped = {
+      missingAccess: 0,
+      explicitFalse: 0,
+      hardExcluded: 0,
+      parseError: 0,
+    };
     let indexedCount = 0;
 
     const notes = [];
@@ -234,16 +237,26 @@ export class VaultIndex {
     for (const file of files) {
       const relativePath = normalizeRelativeVaultPath(file);
       if (this.isHardExcluded(relativePath)) {
+        skipped.hardExcluded += 1;
         continue;
       }
 
       const absolutePath = path.resolve(this.config.vaultRoot, ...relativePath.split("/"));
-      const stat = fs.statSync(absolutePath);
-      const rawContent = fs.readFileSync(absolutePath, "utf8");
-      const note = this.parseNote(relativePath, rawContent, stat);
+      let note;
+      try {
+        const stat = fs.statSync(absolutePath);
+        const rawContent = fs.readFileSync(absolutePath, "utf8");
+        note = this.parseNote(relativePath, rawContent, stat);
+      } catch (err) {
+        skipped.parseError += 1;
+        this.logger?.warn({ tool: "kb_ingest", path: relativePath, error: String(err?.message ?? err) });
+        this.stats?.pushError({ tool: "kb_ingest", path: relativePath, message: err?.message ?? String(err), code: "parseError" });
+        continue;
+      }
 
       if (!note.aiAccessible) {
-        skippedWithoutAccess += 1;
+        if (note.accessReason === "explicitFalse") skipped.explicitFalse += 1;
+        else skipped.missingAccess += 1;
         continue;
       }
 
@@ -272,14 +285,17 @@ export class VaultIndex {
 
     writeAll(notes);
 
-    return {
+    const report = {
       vaultRoot: this.config.vaultRoot,
       scannedMarkdownFiles: files.length,
       indexedNotes: indexedCount,
-      skippedWithoutAccess,
+      skipped,
+      skippedWithoutAccess: skipped.missingAccess + skipped.explicitFalse,
       hardExcludedFolders: this.config.hardExcludedFolders,
       indexedAt: this.getLastIngestedAt(),
     };
+    this.stats?.recordIngest(report);
+    return report;
   }
 
   ensureIndexed() {
@@ -403,9 +419,17 @@ export class VaultIndex {
     const title = asString(data.title) || extractHeading(parsed.content) || path.posix.basename(relativePath, ".md");
     const tags = normalizeTags(data.tags);
     const folder = path.posix.dirname(relativePath) === "." ? "" : path.posix.dirname(relativePath);
+    const accessRaw = data["ai-access"] ?? data.ai_access ?? data.aiAccess;
+    const aiAccessible = asBoolean(accessRaw);
+    const accessReason = aiAccessible
+      ? "accessible"
+      : accessRaw === undefined || accessRaw === null || accessRaw === ""
+        ? "missingAccess"
+        : "explicitFalse";
 
     return {
-      aiAccessible: asBoolean(data["ai-access"] ?? data.ai_access ?? data.aiAccess),
+      aiAccessible,
+      accessReason,
       path: relativePath,
       folder,
       title,

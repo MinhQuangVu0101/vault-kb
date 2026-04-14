@@ -8,6 +8,7 @@ import { loadConfig } from "./config.js";
 import { createLogger } from "./logger.js";
 import { createStats } from "./stats.js";
 import { VaultIndex } from "./vault-index.js";
+import { createWatcher } from "./watcher.js";
 
 function formatList(rows) {
   if (rows.length === 0) {
@@ -97,6 +98,9 @@ if (args.has("--ingest-only")) {
 const initialStats = vaultIndex.ingest();
 console.error(`[vault-mcp] Indexed ${initialStats.indexedNotes} AI-accessible notes from ${initialStats.scannedMarkdownFiles} markdown files.`);
 
+const watcher = args.has("--no-watcher") ? null : createWatcher({ config, vaultIndex, logger, stats });
+watcher?.start();
+
 const server = new McpServer({
   name: "quangs-vault-mcp",
   version: "0.1.0",
@@ -171,6 +175,7 @@ server.registerTool("kb_stats", {
     vaultRootSource: config.vaultRootSource,
     logPath: logger.logPath,
     loggerDisabled: logger.disabled,
+    watcher: watcher ? watcher.snapshot() : { active: false, events: null },
     ...snap,
   }, null, 2));
 }));
@@ -179,6 +184,7 @@ const transport = new StdioServerTransport();
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, async () => {
+    await watcher?.stop();
     await server.close();
     vaultIndex.close();
     process.exit(0);

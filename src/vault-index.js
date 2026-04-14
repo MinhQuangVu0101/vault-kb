@@ -197,6 +197,8 @@ export class VaultIndex {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
     `);
     this.getMetaStmt = this.db.prepare("SELECT value FROM meta WHERE key = ?");
+    this.deleteOneNoteStmt = this.db.prepare("DELETE FROM notes WHERE path = ?");
+    this.deleteOneFtsStmt = this.db.prepare("DELETE FROM notes_fts WHERE path = ?");
     this.searchBaseSql = `
       SELECT
         notes.path,
@@ -296,6 +298,54 @@ export class VaultIndex {
     };
     this.stats?.recordIngest(report);
     return report;
+  }
+
+  ingestOne(requestedPath) {
+    const relativePath = normalizeRelativeVaultPath(requestedPath);
+    if (this.isHardExcluded(relativePath)) {
+      return { path: relativePath, action: "skipped", reason: "hardExcluded" };
+    }
+
+    const absolutePath = path.resolve(this.config.vaultRoot, ...relativePath.split("/"));
+    if (!fs.existsSync(absolutePath)) {
+      return this.removeOne(relativePath);
+    }
+
+    let note;
+    try {
+      const stat = fs.statSync(absolutePath);
+      const rawContent = fs.readFileSync(absolutePath, "utf8");
+      note = this.parseNote(relativePath, rawContent, stat);
+    } catch (err) {
+      this.logger?.warn({ tool: "watcher", path: relativePath, error: String(err?.message ?? err) });
+      this.stats?.pushError({ tool: "watcher", path: relativePath, message: err?.message ?? String(err), code: "parseError" });
+      return { path: relativePath, action: "skipped", reason: "parseError" };
+    }
+
+    if (!note.aiAccessible) {
+      this.removeOne(relativePath);
+      return { path: relativePath, action: "skipped", reason: note.accessReason };
+    }
+
+    const tx = this.db.transaction((item) => {
+      this.deleteOneNoteStmt.run(item.path);
+      this.deleteOneFtsStmt.run(item.path);
+      this.insertNoteStmt.run(item);
+      this.insertFtsStmt.run(item);
+    });
+    tx(note);
+
+    return { path: relativePath, action: "upserted" };
+  }
+
+  removeOne(requestedPath) {
+    const relativePath = normalizeRelativeVaultPath(requestedPath);
+    const tx = this.db.transaction((p) => {
+      this.deleteOneNoteStmt.run(p);
+      this.deleteOneFtsStmt.run(p);
+    });
+    tx(relativePath);
+    return { path: relativePath, action: "removed" };
   }
 
   ensureIndexed() {

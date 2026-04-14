@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>vault-kb</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>vault-kb</h1>
+    <div id="stats-bar" class="stats">loading…</div>
+  </header>
+
+  <section class="search">
+    <div class="row">
+      <input id="q" type="search" placeholder="Search…" autofocus>
+      <select id="mode">
+        <option value="search">keyword</option>
+        <option value="semantic">semantic</option>
+      </select>
+      <button id="go">Search</button>
+    </div>
+    <div class="row small">
+      <input id="folder" placeholder="folder filter (optional)">
+      <input id="tag" placeholder="tag filter (optional)">
+    </div>
+  </section>
+
+  <main>
+    <aside id="results" aria-label="Results"></aside>
+    <article id="detail" aria-label="Note detail"><p class="hint">Pick a result to see details.</p></article>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

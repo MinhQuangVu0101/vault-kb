@@ -11,6 +11,7 @@ import { VaultIndex } from "./vault-index.js";
 import { createWatcher } from "./watcher.js";
 import { runBulkUpdate } from "./bulk.js";
 import { createEmbedder } from "./embeddings.js";
+import { createWebServer } from "./web.js";
 
 function formatList(rows) {
   if (rows.length === 0) {
@@ -124,6 +125,28 @@ if (embedder) {
 
 const watcher = args.has("--no-watcher") ? null : createWatcher({ config, vaultIndex, logger, stats });
 watcher?.start();
+
+let web = null;
+if (args.has("--web")) {
+  web = createWebServer({
+    vaultIndex,
+    logger,
+    statsSource: () => ({
+      vaultRoot: config.vaultRoot,
+      vaultRootSource: config.vaultRootSource,
+      logPath: logger.logPath,
+      watcher: watcher ? watcher.snapshot() : { active: false, events: null },
+      embeddings: {
+        covered: vaultIndex.embeddingsCount(),
+        total: stats.snapshot().indexed,
+        ...(embedder ? embedder.status() : { model: null, reachable: null, lastError: null }),
+      },
+      ...stats.snapshot(),
+    }),
+  });
+  const info = await web.start();
+  console.error(`[vault-mcp] Web UI: http://${info.host}:${info.port}`);
+}
 
 const server = new McpServer({
   name: "quangs-vault-mcp",
@@ -255,6 +278,7 @@ const transport = new StdioServerTransport();
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, async () => {
     await watcher?.stop();
+    await web?.stop();
     await server.close();
     vaultIndex.close();
     process.exit(0);

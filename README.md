@@ -109,11 +109,25 @@ Works automatically when running in the vault directory with the MCP server conf
 
 Once configured, your AI tool can:
 
-- **`kb_search`** — Full-text search across indexed notes
+- **`kb_search`** — Full-text search across indexed notes (FTS5/BM25)
+- **`kb_semantic`** — Embedding-based semantic search via local Ollama
 - **`kb_read`** — Read a specific note by path
 - **`kb_list`** — List notes by folder, tag, or status
 - **`kb_ingest`** — Rebuild the index
-- **`kb_stats`** — Report index health: indexed count, skip breakdown (missingAccess / explicitFalse / hardExcluded / parseError), last ingest, recent errors
+- **`kb_bulk_update`** — Batch frontmatter edits with dry-run + revert bundle
+- **`kb_stats`** — Index health: counts, skip breakdown, watcher state, embedding coverage
+
+### Semantic search (optional)
+
+`kb_semantic` needs a local Ollama with an embedding model:
+
+```bash
+brew install ollama
+brew services start ollama
+ollama pull nomic-embed-text
+```
+
+Embeddings populate automatically on startup and watcher updates. If Ollama is offline, regular search/list still work — only `kb_semantic` is affected.
 
 ### Observability
 
@@ -127,7 +141,10 @@ npm run inspect-config  # Show resolved config
 npm run smoke           # Run a basic smoke test
 npm test                # Run unit tests
 npm run regression      # Read every indexed note, report failures
+npm run bulk -- --help  # Bulk frontmatter edits (dry-run by default)
 npm start               # Start the MCP server (stdio)
+npm start -- --no-embed # Start without semantic embeddings
+npm start -- --no-watcher # Start without the file watcher
 ```
 
 ## Privacy

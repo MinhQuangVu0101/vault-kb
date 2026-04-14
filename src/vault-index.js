@@ -6,6 +6,7 @@ import fg from "fast-glob";
 import matter from "gray-matter";
 
 import { normalizeRelativeVaultPath } from "./config.js";
+import { blobToFloats, cosineSimilarity, floatsToBlob } from "./embeddings.js";
 
 function asString(value) {
   if (value === undefined || value === null) {
@@ -92,10 +93,11 @@ function ensureDirForFile(filePath) {
 }
 
 export class VaultIndex {
-  constructor(config, { logger = null, stats = null } = {}) {
+  constructor(config, { logger = null, stats = null, embedder = null } = {}) {
     this.config = config;
     this.logger = logger;
     this.stats = stats;
+    this.embedder = embedder;
     ensureDirForFile(config.indexPath);
     this.db = new Database(config.indexPath);
     this.db.pragma("journal_mode = WAL");
@@ -138,6 +140,14 @@ export class VaultIndex {
       CREATE TABLE IF NOT EXISTS meta (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS embeddings (
+        path TEXT PRIMARY KEY,
+        model TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        vector BLOB NOT NULL,
+        embedded_at TEXT NOT NULL
       );
     `);
   }
@@ -199,6 +209,19 @@ export class VaultIndex {
     this.getMetaStmt = this.db.prepare("SELECT value FROM meta WHERE key = ?");
     this.deleteOneNoteStmt = this.db.prepare("DELETE FROM notes WHERE path = ?");
     this.deleteOneFtsStmt = this.db.prepare("DELETE FROM notes_fts WHERE path = ?");
+    this.getEmbeddingStmt = this.db.prepare("SELECT model, content_hash, vector FROM embeddings WHERE path = ?");
+    this.upsertEmbeddingStmt = this.db.prepare(`
+      INSERT INTO embeddings (path, model, content_hash, vector, embedded_at)
+      VALUES (@path, @model, @content_hash, @vector, @embedded_at)
+      ON CONFLICT(path) DO UPDATE SET
+        model = excluded.model,
+        content_hash = excluded.content_hash,
+        vector = excluded.vector,
+        embedded_at = excluded.embedded_at
+    `);
+    this.deleteEmbeddingStmt = this.db.prepare("DELETE FROM embeddings WHERE path = ?");
+    this.countEmbeddingsStmt = this.db.prepare("SELECT COUNT(*) AS c FROM embeddings");
+    this.listEmbeddingsStmt = this.db.prepare("SELECT path, vector FROM embeddings");
     this.searchBaseSql = `
       SELECT
         notes.path,
@@ -343,9 +366,94 @@ export class VaultIndex {
     const tx = this.db.transaction((p) => {
       this.deleteOneNoteStmt.run(p);
       this.deleteOneFtsStmt.run(p);
+      this.deleteEmbeddingStmt.run(p);
     });
     tx(relativePath);
     return { path: relativePath, action: "removed" };
+  }
+
+  async embedIfStale(relativePath, { title, body }) {
+    if (!this.embedder) return { path: relativePath, action: "skipped", reason: "noEmbedder" };
+    const hash = this.embedder.contentHash(title, body);
+    const existing = this.getEmbeddingStmt.get(relativePath);
+    if (existing && existing.content_hash === hash) {
+      return { path: relativePath, action: "cached" };
+    }
+    const result = await this.embedder.embedNote({ title, body });
+    if (!result) return { path: relativePath, action: "failed" };
+    this.upsertEmbeddingStmt.run({
+      path: relativePath,
+      model: result.model,
+      content_hash: result.contentHash,
+      vector: floatsToBlob(result.vector),
+      embedded_at: new Date().toISOString(),
+    });
+    return { path: relativePath, action: "embedded" };
+  }
+
+  async embedAll({ concurrency = 4 } = {}) {
+    if (!this.embedder) return { embedded: 0, cached: 0, failed: 0, skipped: 0 };
+    const rows = this.db.prepare("SELECT path, title, body FROM notes").all();
+    const summary = { embedded: 0, cached: 0, failed: 0, skipped: 0 };
+    const queue = rows.slice();
+    const workers = Array.from({ length: concurrency }, async () => {
+      while (queue.length) {
+        const row = queue.shift();
+        if (!row) return;
+        try {
+          const r = await this.embedIfStale(row.path, { title: row.title, body: row.body });
+          summary[r.action] = (summary[r.action] ?? 0) + 1;
+        } catch (err) {
+          summary.failed += 1;
+          this.logger?.warn({ event: "embed_error", path: row.path, error: String(err?.message ?? err) });
+        }
+      }
+    });
+    await Promise.all(workers);
+    return summary;
+  }
+
+  embeddingsCount() {
+    return this.countEmbeddingsStmt.get()?.c ?? 0;
+  }
+
+  async semanticSearch({ query, folder, tag, limit = 8 }) {
+    if (!this.embedder) throw new Error("Embedder not configured.");
+    if (!query || !String(query).trim()) throw new Error("Query is empty.");
+    if (this.embeddingsCount() === 0) {
+      throw new Error("No embeddings yet. Run kb_ingest after Ollama is reachable.");
+    }
+
+    const qVector = await this.embedder.embedQuery(String(query).trim());
+
+    const filterSql = [];
+    const params = [];
+    if (folder) {
+      const f = normalizeRelativeVaultPath(folder);
+      filterSql.push("AND (folder = ? OR folder LIKE ?)");
+      params.push(f, `${f}/%`);
+    }
+    if (tag) {
+      const t = String(tag).replace(/^#/, "").toLowerCase();
+      filterSql.push("AND tags_filter LIKE ?");
+      params.push(`%|${t}|%`);
+    }
+
+    const sql = `
+      SELECT notes.path, notes.title, notes.folder, notes.tags_text, notes.excerpt,
+             notes.area, notes.type, notes.status, notes.updated,
+             embeddings.vector
+      FROM embeddings JOIN notes ON notes.path = embeddings.path
+      WHERE 1=1 ${filterSql.join(" ")}
+    `;
+    const rows = this.db.prepare(sql).all(...params);
+
+    const scored = rows.map((row) => {
+      const vec = blobToFloats(row.vector);
+      return { ...row, score: cosineSimilarity(qVector, vec) };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, limit).map(({ vector, ...rest }) => rest);
   }
 
   ensureIndexed() {

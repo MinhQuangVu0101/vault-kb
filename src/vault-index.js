@@ -7,6 +7,7 @@ import matter from "gray-matter";
 
 import { normalizeRelativeVaultPath } from "./config.js";
 import { blobToFloats, cosineSimilarity, floatsToBlob } from "./embeddings.js";
+import { buildResolver, parseLinks } from "./links.js";
 
 function asString(value) {
   if (value === undefined || value === null) {
@@ -149,6 +150,15 @@ export class VaultIndex {
         vector BLOB NOT NULL,
         embedded_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS links (
+        source TEXT NOT NULL,
+        target TEXT NOT NULL,
+        target_raw TEXT NOT NULL,
+        unresolved INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_links_source ON links (source);
+      CREATE INDEX IF NOT EXISTS idx_links_target ON links (target);
     `);
   }
 
@@ -222,6 +232,25 @@ export class VaultIndex {
     this.deleteEmbeddingStmt = this.db.prepare("DELETE FROM embeddings WHERE path = ?");
     this.countEmbeddingsStmt = this.db.prepare("SELECT COUNT(*) AS c FROM embeddings");
     this.listEmbeddingsStmt = this.db.prepare("SELECT path, vector FROM embeddings");
+    this.deleteLinksForSourceStmt = this.db.prepare("DELETE FROM links WHERE source = ?");
+    this.insertLinkStmt = this.db.prepare(
+      "INSERT INTO links (source, target, target_raw, unresolved) VALUES (?, ?, ?, ?)",
+    );
+    this.backlinksStmt = this.db.prepare(`
+      SELECT DISTINCT links.source AS path, notes.title
+      FROM links JOIN notes ON notes.path = links.source
+      WHERE links.target = ? AND links.unresolved = 0
+      ORDER BY notes.title COLLATE NOCASE
+    `);
+    this.outlinksStmt = this.db.prepare(`
+      SELECT links.target AS path, links.target_raw AS raw, links.unresolved, notes.title
+      FROM links LEFT JOIN notes ON notes.path = links.target
+      WHERE links.source = ?
+      ORDER BY links.target_raw COLLATE NOCASE
+    `);
+    this.backlinkCountStmt = this.db.prepare(
+      "SELECT target AS path, COUNT(*) AS c FROM links WHERE unresolved = 0 GROUP BY target",
+    );
     this.searchBaseSql = `
       SELECT
         notes.path,
@@ -319,6 +348,7 @@ export class VaultIndex {
       hardExcludedFolders: this.config.hardExcludedFolders,
       indexedAt: this.getLastIngestedAt(),
     };
+    this.rebuildAllLinks();
     this.stats?.recordIngest(report);
     return report;
   }
@@ -357,6 +387,7 @@ export class VaultIndex {
       this.insertFtsStmt.run(item);
     });
     tx(note);
+    this.rebuildLinksForSource(relativePath, note.body);
 
     return { path: relativePath, action: "upserted" };
   }
@@ -367,9 +398,67 @@ export class VaultIndex {
       this.deleteOneNoteStmt.run(p);
       this.deleteOneFtsStmt.run(p);
       this.deleteEmbeddingStmt.run(p);
+      this.deleteLinksForSourceStmt.run(p);
     });
     tx(relativePath);
     return { path: relativePath, action: "removed" };
+  }
+
+  replaceLinksForSource(sourcePath, rawLinks, resolver) {
+    const tx = this.db.transaction(() => {
+      this.deleteLinksForSourceStmt.run(sourcePath);
+      for (const raw of rawLinks) {
+        const resolved = resolver(raw);
+        this.insertLinkStmt.run(
+          sourcePath,
+          resolved ?? "",
+          raw,
+          resolved ? 0 : 1,
+        );
+      }
+    });
+    tx();
+  }
+
+  rebuildAllLinks() {
+    const rows = this.db.prepare("SELECT path, body FROM notes").all();
+    const resolver = buildResolver(rows.map((r) => r.path));
+    const tx = this.db.transaction(() => {
+      this.db.prepare("DELETE FROM links").run();
+      for (const row of rows) {
+        const raws = parseLinks(row.body);
+        for (const raw of raws) {
+          const resolved = resolver(raw);
+          this.insertLinkStmt.run(row.path, resolved ?? "", raw, resolved ? 0 : 1);
+        }
+      }
+    });
+    tx();
+  }
+
+  rebuildLinksForSource(sourcePath, body) {
+    const rows = this.db.prepare("SELECT path FROM notes").all();
+    const resolver = buildResolver(rows.map((r) => r.path));
+    this.replaceLinksForSource(sourcePath, parseLinks(body), resolver);
+  }
+
+  getBacklinks(targetPath) {
+    return this.backlinksStmt.all(targetPath);
+  }
+
+  getOutlinks(sourcePath) {
+    return this.outlinksStmt.all(sourcePath).map((row) => ({
+      path: row.path || null,
+      raw: row.raw,
+      title: row.title ?? null,
+      unresolved: Boolean(row.unresolved),
+    }));
+  }
+
+  backlinkCounts() {
+    const map = new Map();
+    for (const { path: p, c } of this.backlinkCountStmt.all()) map.set(p, c);
+    return map;
   }
 
   async embedIfStale(relativePath, { title, body }) {
@@ -453,7 +542,8 @@ export class VaultIndex {
       return { ...row, score: cosineSimilarity(qVector, vec) };
     });
     scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, limit).map(({ vector, ...rest }) => rest);
+    const top = scored.slice(0, limit).map(({ vector, ...rest }) => rest);
+    return this.#annotateBacklinkCounts(top);
   }
 
   ensureIndexed() {
@@ -490,7 +580,14 @@ export class VaultIndex {
     sqlParts.push("ORDER BY score ASC, notes.updated DESC LIMIT ?");
     params.push(normalizedLimit);
 
-    return this.db.prepare(sqlParts.join(" ")).all(...params);
+    const rows = this.db.prepare(sqlParts.join(" ")).all(...params);
+    return this.#annotateBacklinkCounts(rows);
+  }
+
+  #annotateBacklinkCounts(rows) {
+    if (!rows.length) return rows;
+    const counts = this.backlinkCounts();
+    return rows.map((row) => ({ ...row, backlinkCount: counts.get(row.path) ?? 0 }));
   }
 
   list({ folder, tag, status, limit }) {
@@ -533,7 +630,8 @@ export class VaultIndex {
     sqlParts.push("ORDER BY updated DESC, title COLLATE NOCASE ASC LIMIT ?");
     params.push(normalizedLimit);
 
-    return this.db.prepare(sqlParts.join(" ")).all(...params);
+    const rows = this.db.prepare(sqlParts.join(" ")).all(...params);
+    return this.#annotateBacklinkCounts(rows);
   }
 
   readNote(requestedPath, maxChars) {
@@ -568,6 +666,8 @@ export class VaultIndex {
       truncated,
       maxChars: resolvedMaxChars,
       absolutePath,
+      backlinks: this.getBacklinks(relativePath),
+      outlinks: this.getOutlinks(relativePath),
     };
   }
 

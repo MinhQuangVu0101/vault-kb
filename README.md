@@ -111,7 +111,7 @@ Once configured, your AI tool can:
 
 - **`kb_search`** — Full-text search across indexed notes (FTS5/BM25)
 - **`kb_semantic`** — Embedding-based semantic search via local Ollama
-- **`kb_read`** — Read a specific note by path
+- **`kb_read`** — Read a specific note by path (includes backlinks + outlinks)
 - **`kb_list`** — List notes by folder, tag, or status
 - **`kb_ingest`** — Rebuild the index
 - **`kb_bulk_update`** — Batch frontmatter edits with dry-run + revert bundle

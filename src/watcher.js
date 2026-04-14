@@ -21,12 +21,16 @@ export function createWatcher({ config, vaultIndex, logger, stats, debounceMs = 
     );
   }
 
-  function handle(kind, relPath) {
+  async function handle(kind, relPath) {
     try {
       if (kind === "unlink") {
         vaultIndex.removeOne(relPath);
-      } else {
-        vaultIndex.ingestOne(relPath);
+        return;
+      }
+      const result = vaultIndex.ingestOne(relPath);
+      if (result.action === "upserted") {
+        const row = vaultIndex.db.prepare("SELECT title, body FROM notes WHERE path = ?").get(relPath);
+        if (row) await vaultIndex.embedIfStale(relPath, { title: row.title, body: row.body }).catch(() => {});
       }
     } catch (err) {
       events.error += 1;

@@ -10,6 +10,7 @@ import { createStats } from "./stats.js";
 import { VaultIndex } from "./vault-index.js";
 import { createWatcher } from "./watcher.js";
 import { runBulkUpdate } from "./bulk.js";
+import { createEmbedder } from "./embeddings.js";
 
 function formatList(rows) {
   if (rows.length === 0) {
@@ -61,7 +62,8 @@ const args = new Set(process.argv.slice(2));
 const config = loadConfig();
 const logger = createLogger();
 const stats = createStats();
-const vaultIndex = new VaultIndex(config, { logger, stats });
+const embedder = args.has("--no-embed") ? null : createEmbedder({ logger });
+const vaultIndex = new VaultIndex(config, { logger, stats, embedder });
 logger.info({ event: "startup", vaultRoot: config.vaultRoot, source: config.vaultRootSource });
 
 function wrapTool(name, handler) {
@@ -98,6 +100,15 @@ if (args.has("--ingest-only")) {
 
 const initialStats = vaultIndex.ingest();
 console.error(`[vault-mcp] Indexed ${initialStats.indexedNotes} AI-accessible notes from ${initialStats.scannedMarkdownFiles} markdown files.`);
+
+if (embedder) {
+  vaultIndex.embedAll().then((summary) => {
+    console.error(`[vault-mcp] Embeddings: ${JSON.stringify(summary)}`);
+    logger.info({ event: "embed_all_done", ...summary });
+  }).catch((err) => {
+    logger.warn({ event: "embed_all_error", error: String(err?.message ?? err) });
+  });
+}
 
 const watcher = args.has("--no-watcher") ? null : createWatcher({ config, vaultIndex, logger, stats });
 watcher?.start();
@@ -166,6 +177,20 @@ server.registerTool("kb_ingest", {
   ].join("\n"));
 }));
 
+server.registerTool("kb_semantic", {
+  title: "Semantic search",
+  description: "Embedding-based search via local Ollama. Returns notes ranked by cosine similarity. Requires Ollama running and embeddings populated.",
+  inputSchema: {
+    query: z.string().min(1),
+    folder: z.string().min(1).optional(),
+    tag: z.string().min(1).optional(),
+    limit: z.number().int().positive().optional(),
+  },
+}, wrapTool("kb_semantic", async ({ query, folder, tag, limit }) => {
+  const rows = await vaultIndex.semanticSearch({ query, folder, tag, limit });
+  return toolText(formatList(rows.map((r) => ({ ...r, snippet: r.excerpt, score: r.score.toFixed(3) }))));
+}));
+
 server.registerTool("kb_bulk_update", {
   title: "Bulk update note frontmatter",
   description: "Match notes by folder/tag/frontmatter/paths and apply frontmatter ops (addTags, removeTags, setFields, unsetFields, setAccess). Dry-run unless apply=true. Writes a revert bundle when applied.",
@@ -204,6 +229,11 @@ server.registerTool("kb_stats", {
     logPath: logger.logPath,
     loggerDisabled: logger.disabled,
     watcher: watcher ? watcher.snapshot() : { active: false, events: null },
+    embeddings: {
+      covered: vaultIndex.embeddingsCount(),
+      total: snap.indexed,
+      ...(embedder ? embedder.status() : { model: null, reachable: null, lastError: null }),
+    },
     ...snap,
   }, null, 2));
 }));

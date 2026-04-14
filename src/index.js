@@ -5,6 +5,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 import { loadConfig } from "./config.js";
+import { createLogger } from "./logger.js";
+import { createStats } from "./stats.js";
 import { VaultIndex } from "./vault-index.js";
 
 function formatList(rows) {
@@ -55,7 +57,27 @@ function toolText(text) {
 
 const args = new Set(process.argv.slice(2));
 const config = loadConfig();
-const vaultIndex = new VaultIndex(config);
+const logger = createLogger();
+const stats = createStats();
+const vaultIndex = new VaultIndex(config, { logger, stats });
+logger.info({ event: "startup", vaultRoot: config.vaultRoot, source: config.vaultRootSource });
+
+function wrapTool(name, handler) {
+  return async (args) => {
+    stats.recordToolCall(name);
+    logger.info({ event: "tool_call", tool: name, args });
+    const t0 = Date.now();
+    try {
+      const result = await handler(args);
+      logger.info({ event: "tool_ok", tool: name, duration_ms: Date.now() - t0 });
+      return result;
+    } catch (err) {
+      logger.error({ event: "tool_error", tool: name, duration_ms: Date.now() - t0, error: String(err?.message ?? err), stack: err?.stack });
+      stats.pushError({ tool: name, path: args?.path, message: err?.message ?? String(err) });
+      throw err;
+    }
+  };
+}
 
 if (args.has("--print-config")) {
   console.log(JSON.stringify({
@@ -93,10 +115,10 @@ server.registerTool("kb_search", {
     tag: z.string().min(1).optional(),
     limit: z.number().int().positive().optional(),
   },
-}, async ({ query, folder, tag, limit }) => {
+}, wrapTool("kb_search", async ({ query, folder, tag, limit }) => {
   const rows = vaultIndex.search({ query, folder, tag, limit });
   return toolText(formatList(rows));
-});
+}));
 
 server.registerTool("kb_read", {
   title: "Read a note",
@@ -105,10 +127,10 @@ server.registerTool("kb_read", {
     path: z.string().min(1),
     maxChars: z.number().int().positive().optional(),
   },
-}, async ({ path, maxChars }) => {
+}, wrapTool("kb_read", async ({ path, maxChars }) => {
   const note = vaultIndex.readNote(path, maxChars);
   return toolText(formatReadResult(note));
-});
+}));
 
 server.registerTool("kb_list", {
   title: "List notes",
@@ -119,25 +141,39 @@ server.registerTool("kb_list", {
     status: z.string().min(1).optional(),
     limit: z.number().int().positive().optional(),
   },
-}, async ({ folder, tag, status, limit }) => {
+}, wrapTool("kb_list", async ({ folder, tag, status, limit }) => {
   const rows = vaultIndex.list({ folder, tag, status, limit });
   return toolText(formatList(rows));
-});
+}));
 
 server.registerTool("kb_ingest", {
   title: "Re-index the vault",
   description: "Rebuild the local SQLite FTS index from AI-accessible notes.",
-}, async () => {
-  const stats = vaultIndex.ingest();
+}, wrapTool("kb_ingest", async () => {
+  const report = vaultIndex.ingest();
   return toolText([
     "Vault index refreshed.",
-    `vaultRoot: ${stats.vaultRoot}`,
-    `scannedMarkdownFiles: ${stats.scannedMarkdownFiles}`,
-    `indexedNotes: ${stats.indexedNotes}`,
-    `skippedWithoutAccess: ${stats.skippedWithoutAccess}`,
-    `indexedAt: ${stats.indexedAt}`,
+    `vaultRoot: ${report.vaultRoot}`,
+    `scannedMarkdownFiles: ${report.scannedMarkdownFiles}`,
+    `indexedNotes: ${report.indexedNotes}`,
+    `skipped: missingAccess=${report.skipped.missingAccess}, explicitFalse=${report.skipped.explicitFalse}, hardExcluded=${report.skipped.hardExcluded}, parseError=${report.skipped.parseError}`,
+    `indexedAt: ${report.indexedAt}`,
   ].join("\n"));
-});
+}));
+
+server.registerTool("kb_stats", {
+  title: "Index health stats",
+  description: "Report vault-kb index health: counts, skip breakdown, last ingest, recent errors.",
+}, wrapTool("kb_stats", async () => {
+  const snap = stats.snapshot();
+  return toolText(JSON.stringify({
+    vaultRoot: config.vaultRoot,
+    vaultRootSource: config.vaultRootSource,
+    logPath: logger.logPath,
+    loggerDisabled: logger.disabled,
+    ...snap,
+  }, null, 2));
+}));
 
 const transport = new StdioServerTransport();
 

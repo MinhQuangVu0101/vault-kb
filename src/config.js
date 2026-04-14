@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 const configSchema = z.object({
-  vaultRoot: z.string().min(1),
+  vaultRoot: z.string().min(1).optional(),
   indexPath: z.string().default(".data/vault-index.sqlite"),
   hardExcludedFolders: z.array(z.string()).default([
     "20 Notes/Personal/Journal",
@@ -60,24 +60,51 @@ function normalizeFolderPrefix(value) {
 }
 
 const defaultConfigPath = fileURLToPath(new URL("../vault-ai.config.json", import.meta.url));
+const VAULT_PATH_ENV = "VAULT_KB_VAULT_PATH";
 
-export function loadConfig(configPath = defaultConfigPath) {
-  if (!fs.existsSync(configPath)) {
-    throw new Error(`Missing config file: ${configPath}`);
+export function resolveVaultRoot({ env = process.env, configVaultRoot, configPath } = {}) {
+  const fromEnv = env[VAULT_PATH_ENV];
+  if (fromEnv && fromEnv.trim()) {
+    return { vaultRoot: fromEnv.trim(), source: "env" };
+  }
+  if (configVaultRoot && String(configVaultRoot).trim()) {
+    return { vaultRoot: String(configVaultRoot).trim(), source: "config" };
+  }
+  const hint = configPath ? ` or set "vaultRoot" in ${configPath}` : "";
+  throw new Error(
+    `Vault path not configured. Set ${VAULT_PATH_ENV} env var${hint}.`,
+  );
+}
+
+export function loadConfig(configPath = defaultConfigPath, { env = process.env } = {}) {
+  const configExists = fs.existsSync(configPath);
+  const rawConfig = configExists
+    ? JSON.parse(fs.readFileSync(configPath, "utf8"))
+    : {};
+  const parsed = configSchema.parse(rawConfig);
+  const rootDir = configExists ? path.dirname(configPath) : process.cwd();
+
+  const { vaultRoot: rawVaultRoot, source: vaultRootSource } = resolveVaultRoot({
+    env,
+    configVaultRoot: parsed.vaultRoot,
+    configPath: configExists ? configPath : null,
+  });
+
+  const vaultRoot = path.resolve(rootDir, rawVaultRoot);
+  if (!fs.existsSync(vaultRoot)) {
+    throw new Error(`Vault root does not exist: ${vaultRoot} (source: ${vaultRootSource})`);
   }
 
-  const rawConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
-  const parsed = configSchema.parse(rawConfig);
-  const rootDir = path.dirname(configPath);
-  const vaultRoot = path.resolve(rootDir, parsed.vaultRoot);
   const indexPath = path.resolve(rootDir, parsed.indexPath);
   const hardExcludedFolders = parsed.hardExcludedFolders.map(normalizeFolderPrefix);
 
   return {
     ...parsed,
-    configPath,
+    configPath: configExists ? configPath : null,
+    configExists,
     rootDir,
     vaultRoot,
+    vaultRootSource,
     indexPath,
     hardExcludedFolders,
     hardExcludedFoldersLower: hardExcludedFolders.map((folder) => folder.toLowerCase()),

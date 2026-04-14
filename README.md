@@ -8,7 +8,7 @@ Only indexes notes with `ai-access: true` in frontmatter — everything else sta
 
 1. Scans your Obsidian vault for `.md` files with `ai-access: true`
 2. Indexes them into a local SQLite database (FTS5 full-text search)
-3. Exposes three MCP tools: `kb_search`, `kb_read`, `kb_list`
+3. Exposes MCP tools: `kb_search`, `kb_read`, `kb_list`, `kb_ingest`, `kb_stats`
 4. AI tools can search and read your notes — locally, nothing leaves your machine
 
 ## Setup
@@ -19,7 +19,15 @@ cd vault-kb
 npm install
 ```
 
-Create `vault-ai.config.json` in the project root:
+Point the server at your vault. Either:
+
+**A. Env var (recommended, portable across machines):**
+
+```bash
+export VAULT_KB_VAULT_PATH="$HOME/Documents/obsidian-vault"
+```
+
+**B. Config file** — create `vault-ai.config.json` in the project root:
 
 ```json
 {
@@ -29,6 +37,30 @@ Create `vault-ai.config.json` in the project root:
     ".obsidian",
     ".git"
   ]
+}
+```
+
+The env var takes precedence when both are set. `indexPath` and `hardExcludedFolders` are optional and have sensible defaults.
+
+### Mac quick setup
+
+```bash
+git clone https://github.com/MinhQuangVu0101/vault-kb.git ~/Code/vault-kb
+cd ~/Code/vault-kb && npm install
+echo 'export VAULT_KB_VAULT_PATH="$HOME/Documents/obsidian-vault"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Then in your vault's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "vault-kb": {
+      "command": "node",
+      "args": ["/Users/YOU/Code/vault-kb/src/index.js"]
+    }
+  }
 }
 ```
 
@@ -58,6 +90,12 @@ Once configured, your AI tool can:
 - **`kb_search`** — Full-text search across indexed notes
 - **`kb_read`** — Read a specific note by path
 - **`kb_list`** — List notes by folder, tag, or status
+- **`kb_ingest`** — Rebuild the index
+- **`kb_stats`** — Report index health: indexed count, skip breakdown (missingAccess / explicitFalse / hardExcluded / parseError), last ingest, recent errors
+
+### Observability
+
+Every tool call is logged as a JSON line to `~/.cache/vault-kb/vault-kb.log` (rotates at 10MB). Failures also show up in `kb_stats.recentErrors` (last 20).
 
 ### CLI tools
 
@@ -65,6 +103,8 @@ Once configured, your AI tool can:
 npm run ingest          # Build/rebuild the index
 npm run inspect-config  # Show resolved config
 npm run smoke           # Run a basic smoke test
+npm test                # Run unit tests
+npm run regression      # Read every indexed note, report failures
 npm start               # Start the MCP server (stdio)
 ```
 

@@ -1,0 +1,130 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import matter from "gray-matter";
+
+import { VaultIndex } from "../src/vault-index.js";
+import { createWebServer } from "../src/web.js";
+
+function tmpVault() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-web-"));
+}
+
+function mkConfig(vaultRoot) {
+  return {
+    vaultRoot,
+    indexPath: path.join(vaultRoot, ".data", "index.sqlite"),
+    hardExcludedFolders: [],
+    hardExcludedFoldersLower: [],
+    defaultLimits: { search: 8, list: 25, readChars: 12000 },
+    maxLimits: { search: 20, list: 100, readChars: 40000 },
+  };
+}
+
+function write(v, rel, fm, body) {
+  const abs = path.join(v, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, matter.stringify(body, fm));
+}
+
+async function withServer(fn) {
+  const v = tmpVault();
+  write(v, "a.md", { "ai-access": true, status: "active" }, "links to [[B]] hello world");
+  write(v, "b.md", { "ai-access": true, status: "active" }, "body of B");
+  const config = mkConfig(v);
+  const index = new VaultIndex(config);
+  index.ingest();
+
+  const web = createWebServer({
+    vaultIndex: index,
+    statsSource: () => ({
+      indexed: 2,
+      watcher: { active: false, events: null },
+      embeddings: { covered: 0, total: 2, reachable: null, model: null, lastError: null },
+      lastIngest: new Date().toISOString(),
+    }),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  const info = await web.start();
+  const base = `http://${info.host}:${info.port}`;
+  try {
+    await fn(base);
+  } finally {
+    await web.stop();
+    index.close();
+  }
+}
+
+test("GET /api/stats returns snapshot", async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/stats`);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.indexed, 2);
+    assert.equal(json.watcher.active, false);
+  });
+});
+
+test("GET /api/search returns rows with backlinkCount", async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/search?q=hello`);
+    const json = await res.json();
+    assert.ok(Array.isArray(json.rows));
+    assert.ok(json.rows.length >= 1);
+    assert.equal(typeof json.rows[0].backlinkCount, "number");
+  });
+});
+
+test("GET /api/search without q returns 400", async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/search`);
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.match(json.error.message, /q required/);
+  });
+});
+
+test("GET /api/list returns rows", async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/list?status=active`);
+    const json = await res.json();
+    assert.equal(json.rows.length, 2);
+  });
+});
+
+test("GET /api/read returns backlinks + outlinks", async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/read?path=b.md`);
+    const json = await res.json();
+    assert.equal(json.path, "b.md");
+    assert.equal(json.backlinks.length, 1);
+    assert.equal(json.backlinks[0].path, "a.md");
+  });
+});
+
+test("GET /api/read missing path returns 400", async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/read`);
+    assert.equal(res.status, 400);
+  });
+});
+
+test("GET / serves index.html", async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/`);
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.match(html, /vault-kb/);
+  });
+});
+
+test("GET /api/unknown returns 404", async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/nope`);
+    assert.equal(res.status, 404);
+  });
+});

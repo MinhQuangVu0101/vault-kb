@@ -145,6 +145,7 @@ npm run bulk -- --help  # Bulk frontmatter edits (dry-run by default)
 npm start               # Start the MCP server (stdio)
 npm start -- --no-embed # Start without semantic embeddings
 npm start -- --no-watcher # Start without the file watcher
+npm start -- --web      # Also serve a local web UI at http://127.0.0.1:7345
 ```
 
 ## Privacy

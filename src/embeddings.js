@@ -74,24 +74,43 @@ export function createEmbedder({
   }
 
   async function healthCheck() {
-    const res = await fetchFn(`${url}/api/tags`);
-    const json = await res.json();
-    const names = (json.models ?? []).map((m) => m.name);
-    const baseModel = model.split(":")[0];
-    const found = names.find((n) => n === model || n.startsWith(`${baseModel}:`));
-    if (!found) {
+    try {
+      const res = await fetchFn(`${url}/api/tags`);
+      if (!res.ok) {
+        reachable = false;
+        lastError = {
+          message: `HTTP ${res.status}`,
+          code: "UNREACHABLE",
+          ts: new Date().toISOString(),
+        };
+        return { ok: false, requestedModel: model, ...lastError };
+      }
+      const json = await res.json();
+      const names = (json.models ?? []).map((m) => m.name);
+      const baseModel = model.split(":")[0];
+      const found = names.find((n) => n === model || n.startsWith(`${baseModel}:`));
+      if (!found) {
+        reachable = true;
+        lastError = {
+          message: `model '${model}' not installed`,
+          code: "MODEL_MISSING",
+          ts: new Date().toISOString(),
+          availableModels: names,
+        };
+        return { ok: false, requestedModel: model, ...lastError };
+      }
       reachable = true;
+      lastError = null;
+      return { ok: true, requestedModel: model, resolvedModel: found };
+    } catch (err) {
+      reachable = false;
       lastError = {
-        message: `model '${model}' not installed`,
-        code: "MODEL_MISSING",
+        message: String(err?.message ?? err),
+        code: "UNREACHABLE",
         ts: new Date().toISOString(),
-        availableModels: names,
       };
       return { ok: false, requestedModel: model, ...lastError };
     }
-    reachable = true;
-    lastError = null;
-    return { ok: true, requestedModel: model, resolvedModel: found };
   }
 
   return { embedNote, embedQuery, contentHash, status, healthCheck };

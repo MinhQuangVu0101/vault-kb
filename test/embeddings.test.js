@@ -117,3 +117,25 @@ test("healthCheck: MODEL_MISSING when configured model not installed", async () 
   assert.equal(e.status().reachable, true);
   assert.equal(e.status().lastError.code, "MODEL_MISSING");
 });
+
+test("healthCheck: UNREACHABLE when fetch throws", async () => {
+  const e = createEmbedder({
+    fetchFn: async () => { throw new Error("ECONNREFUSED"); },
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "UNREACHABLE");
+  assert.match(r.message, /ECONNREFUSED/);
+  assert.equal(e.status().reachable, false);
+  assert.equal(e.status().lastError.code, "UNREACHABLE");
+});
+
+test("healthCheck: UNREACHABLE on HTTP non-2xx", async () => {
+  const e = createEmbedder({
+    fetchFn: async () => ({ ok: false, status: 502 }),
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "UNREACHABLE");
+  assert.match(r.message, /HTTP 502/);
+});

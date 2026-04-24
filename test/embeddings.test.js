@@ -139,3 +139,21 @@ test("healthCheck: UNREACHABLE on HTTP non-2xx", async () => {
   assert.equal(r.code, "UNREACHABLE");
   assert.match(r.message, /HTTP 502/);
 });
+
+test("healthCheck: UNREACHABLE when probe exceeds timeoutMs", async () => {
+  const e = createEmbedder({
+    timeoutMs: 10,
+    fetchFn: (_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => {
+        const err = new Error("The operation was aborted");
+        err.name = "AbortError";
+        reject(err);
+      });
+    }),
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "UNREACHABLE");
+  assert.match(r.message, /aborted/i);
+  assert.equal(e.status().reachable, false);
+});

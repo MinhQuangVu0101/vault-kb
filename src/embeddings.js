@@ -9,6 +9,7 @@ export function createEmbedder({
   model = process.env.VAULT_KB_EMBED_MODEL || DEFAULT_MODEL,
   logger = null,
   fetchFn = globalThis.fetch,
+  timeoutMs = 2000,
 } = {}) {
   let lastError = null;
   let reachable = null;
@@ -75,7 +76,14 @@ export function createEmbedder({
 
   async function healthCheck() {
     try {
-      const res = await fetchFn(`${url}/api/tags`);
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      let res;
+      try {
+        res = await fetchFn(`${url}/api/tags`, { signal: ctrl.signal });
+      } finally {
+        clearTimeout(timer);
+      }
       if (!res.ok) {
         reachable = false;
         lastError = {

@@ -128,6 +128,8 @@ if (embedder) {
       console.error(`[vault-mcp] WARN: Ollama unreachable at ${url} (${r.message}) — run: ollama serve`);
       logger.warn({ event: "ollama_unreachable", url, error: r.message });
     }
+  }).catch((err) => {
+    logger.warn({ event: "ollama_health_error", error: String(err?.message ?? err) });
   });
 
   vaultIndex.embedAll().then((summary) => {

@@ -81,3 +81,22 @@ test("embedNote succeeds on a well-formed mock response", async () => {
   assert.equal(e.status().reachable, true);
   assert.equal(e.status().lastError, null);
 });
+
+test("healthCheck: ok when model is in /api/tags", async () => {
+  const e = createEmbedder({
+    model: "nomic-embed-text",
+    fetchFn: async (url) => {
+      assert.match(url, /\/api\/tags$/);
+      return {
+        ok: true,
+        json: async () => ({ models: [{ name: "nomic-embed-text:latest" }, { name: "llama3:latest" }] }),
+      };
+    },
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, true);
+  assert.equal(r.resolvedModel, "nomic-embed-text:latest");
+  assert.equal(r.requestedModel, "nomic-embed-text");
+  assert.equal(e.status().reachable, true);
+  assert.equal(e.status().lastError, null);
+});

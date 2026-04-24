@@ -73,7 +73,18 @@ export function createEmbedder({
     return { url, model, reachable, lastError };
   }
 
-  return { embedNote, embedQuery, contentHash, status };
+  async function healthCheck() {
+    const res = await fetchFn(`${url}/api/tags`);
+    const json = await res.json();
+    const names = (json.models ?? []).map((m) => m.name);
+    const baseModel = model.split(":")[0];
+    const found = names.find((n) => n === model || n.startsWith(`${baseModel}:`));
+    reachable = true;
+    lastError = null;
+    return { ok: true, requestedModel: model, resolvedModel: found };
+  }
+
+  return { embedNote, embedQuery, contentHash, status, healthCheck };
 }
 
 export function floatsToBlob(floats) {

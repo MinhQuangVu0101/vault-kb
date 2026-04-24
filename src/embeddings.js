@@ -79,6 +79,16 @@ export function createEmbedder({
     const names = (json.models ?? []).map((m) => m.name);
     const baseModel = model.split(":")[0];
     const found = names.find((n) => n === model || n.startsWith(`${baseModel}:`));
+    if (!found) {
+      reachable = true;
+      lastError = {
+        message: `model '${model}' not installed`,
+        code: "MODEL_MISSING",
+        ts: new Date().toISOString(),
+        availableModels: names,
+      };
+      return { ok: false, requestedModel: model, ...lastError };
+    }
     reachable = true;
     lastError = null;
     return { ok: true, requestedModel: model, resolvedModel: found };

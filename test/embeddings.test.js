@@ -100,3 +100,20 @@ test("healthCheck: ok when model is in /api/tags", async () => {
   assert.equal(e.status().reachable, true);
   assert.equal(e.status().lastError, null);
 });
+
+test("healthCheck: MODEL_MISSING when configured model not installed", async () => {
+  const e = createEmbedder({
+    model: "nomic-embed-text",
+    fetchFn: async () => ({
+      ok: true,
+      json: async () => ({ models: [{ name: "llama3:latest" }] }),
+    }),
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "MODEL_MISSING");
+  assert.equal(r.requestedModel, "nomic-embed-text");
+  assert.deepEqual(r.availableModels, ["llama3:latest"]);
+  assert.equal(e.status().reachable, true);
+  assert.equal(e.status().lastError.code, "MODEL_MISSING");
+});

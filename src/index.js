@@ -115,6 +115,21 @@ const initialStats = vaultIndex.ingest();
 console.error(`[vault-mcp] Indexed ${initialStats.indexedNotes} AI-accessible notes from ${initialStats.scannedMarkdownFiles} markdown files.`);
 
 if (embedder) {
+  embedder.healthCheck().then((r) => {
+    if (r.ok) {
+      console.error(`[vault-mcp] Ollama ready (${r.resolvedModel})`);
+      logger.info({ event: "ollama_health_ok", model: r.resolvedModel });
+    } else if (r.code === "MODEL_MISSING") {
+      const base = r.requestedModel.split(":")[0];
+      console.error(`[vault-mcp] WARN: Ollama reachable but model '${base}' not installed — run: ollama pull ${base}`);
+      logger.warn({ event: "ollama_model_missing", model: base, available: r.availableModels });
+    } else {
+      const { url } = embedder.status();
+      console.error(`[vault-mcp] WARN: Ollama unreachable at ${url} (${r.message}) — run: ollama serve`);
+      logger.warn({ event: "ollama_unreachable", url, error: r.message });
+    }
+  });
+
   vaultIndex.embedAll().then((summary) => {
     console.error(`[vault-mcp] Embeddings: ${JSON.stringify(summary)}`);
     logger.info({ event: "embed_all_done", ...summary });

@@ -95,8 +95,9 @@ export function createEmbedder({
       }
       const json = await res.json();
       const names = (json.models ?? []).map((m) => m.name);
-      const baseModel = model.split(":")[0];
-      const found = names.find((n) => n === model || n.startsWith(`${baseModel}:`));
+      const found = model.includes(":")
+        ? names.find((n) => n === model)
+        : names.find((n) => n === model || n.startsWith(`${model}:`));
       if (!found) {
         reachable = true;
         lastError = {

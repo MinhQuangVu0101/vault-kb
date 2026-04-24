@@ -157,3 +157,29 @@ test("healthCheck: UNREACHABLE when probe exceeds timeoutMs", async () => {
   assert.match(r.message, /aborted/i);
   assert.equal(e.status().reachable, false);
 });
+
+test("healthCheck: exact-tag match when model pins a version", async () => {
+  const e = createEmbedder({
+    model: "nomic-embed-text:v1.5",
+    fetchFn: async () => ({
+      ok: true,
+      json: async () => ({ models: [{ name: "nomic-embed-text:v1.5" }] }),
+    }),
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, true);
+  assert.equal(r.resolvedModel, "nomic-embed-text:v1.5");
+});
+
+test("healthCheck: pinned version absent -> MODEL_MISSING even if base name present", async () => {
+  const e = createEmbedder({
+    model: "nomic-embed-text:v1.5",
+    fetchFn: async () => ({
+      ok: true,
+      json: async () => ({ models: [{ name: "nomic-embed-text:latest" }] }),
+    }),
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "MODEL_MISSING");
+});

@@ -153,6 +153,7 @@ async function openNote(p) {
       .join("") || '<li class="unresolved">none</li>';
 
     detail.innerHTML = `
+      <button class="back-to-results" type="button" aria-label="Back to results">←</button>
       <h2>${escape(note.title)}</h2>
       <div class="path">${escape(note.path)}${note.truncated ? ` · truncated at ${note.maxChars}` : ""}</div>
       <div class="links">
@@ -160,6 +161,11 @@ async function openNote(p) {
       </div>
       <pre class="body"></pre>
     `;
+    detail.querySelector(".back-to-results")?.addEventListener("click", () => {
+      activePath = null;
+      document.body.classList.remove("note-open");
+      for (const el of results.querySelectorAll(".hit")) el.classList.remove("active");
+    });
     detail.querySelector("pre.body").textContent = note.rawContent;
     detail.querySelectorAll("a[data-path]").forEach((a) => {
       a.addEventListener("click", (e) => {

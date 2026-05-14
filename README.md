@@ -115,6 +115,7 @@ Once configured, your AI tool can:
 - **`kb_list`** — List notes by folder, tag, or status
 - **`kb_ingest`** — Rebuild the index
 - **`kb_bulk_update`** — Batch frontmatter edits with dry-run + revert bundle
+- **`kb_suggest_links`** — Top-N similar notes that are NOT already linked, each with a one-sentence LLM-generated reason (via local Ollama chat model)
 - **`kb_stats`** — Index health: counts, skip breakdown, watcher state, embedding coverage
 
 ### Semantic search (optional)
@@ -125,9 +126,12 @@ Once configured, your AI tool can:
 brew install ollama
 brew services start ollama
 ollama pull nomic-embed-text
+ollama pull llama3.2:3b   # for kb_suggest_links reasoning (optional)
 ```
 
 Embeddings populate automatically on startup and watcher updates. If Ollama is offline, regular search/list still work — only `kb_semantic` is affected.
+
+`kb_suggest_links` uses the chat model `llama3.2:3b` (configurable via `llmModel` in `vault-ai.config.json`) for the per-suggestion reason. If the chat model is unavailable, suggestions still come back — just without the `why:` line.
 
 ### Observability
 
@@ -144,6 +148,7 @@ npm run regression      # Read every indexed note, report failures
 npm run bulk -- --help  # Bulk frontmatter edits (dry-run by default)
 npm start               # Start the MCP server (stdio)
 npm start -- --no-embed # Start without semantic embeddings
+npm start -- --no-llm-summary  # Disable LLM reasoning (score-only suggestions)
 npm start -- --no-watcher # Start without the file watcher
 npm start -- --web      # Also serve a local web UI at http://127.0.0.1:7345
 ```

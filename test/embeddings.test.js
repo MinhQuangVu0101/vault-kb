@@ -82,6 +82,108 @@ test("embedNote succeeds on a well-formed mock response", async () => {
   assert.equal(e.status().lastError, null);
 });
 
+test("healthCheck: ok when model is in /api/tags", async () => {
+  const e = createEmbedder({
+    model: "nomic-embed-text",
+    fetchFn: async (url) => {
+      assert.match(url, /\/api\/tags$/);
+      return {
+        ok: true,
+        json: async () => ({ models: [{ name: "nomic-embed-text:latest" }, { name: "llama3:latest" }] }),
+      };
+    },
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, true);
+  assert.equal(r.resolvedModel, "nomic-embed-text:latest");
+  assert.equal(r.requestedModel, "nomic-embed-text");
+  assert.equal(e.status().reachable, true);
+  assert.equal(e.status().lastError, null);
+});
+
+test("healthCheck: MODEL_MISSING when configured model not installed", async () => {
+  const e = createEmbedder({
+    model: "nomic-embed-text",
+    fetchFn: async () => ({
+      ok: true,
+      json: async () => ({ models: [{ name: "llama3:latest" }] }),
+    }),
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "MODEL_MISSING");
+  assert.equal(r.requestedModel, "nomic-embed-text");
+  assert.deepEqual(r.availableModels, ["llama3:latest"]);
+  assert.equal(e.status().reachable, true);
+  assert.equal(e.status().lastError.code, "MODEL_MISSING");
+});
+
+test("healthCheck: UNREACHABLE when fetch throws", async () => {
+  const e = createEmbedder({
+    fetchFn: async () => { throw new Error("ECONNREFUSED"); },
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "UNREACHABLE");
+  assert.match(r.message, /ECONNREFUSED/);
+  assert.equal(e.status().reachable, false);
+  assert.equal(e.status().lastError.code, "UNREACHABLE");
+});
+
+test("healthCheck: UNREACHABLE on HTTP non-2xx", async () => {
+  const e = createEmbedder({
+    fetchFn: async () => ({ ok: false, status: 502 }),
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "UNREACHABLE");
+  assert.match(r.message, /HTTP 502/);
+});
+
+test("healthCheck: UNREACHABLE when probe exceeds timeoutMs", async () => {
+  const e = createEmbedder({
+    timeoutMs: 10,
+    fetchFn: (_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => {
+        const err = new Error("The operation was aborted");
+        err.name = "AbortError";
+        reject(err);
+      });
+    }),
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "UNREACHABLE");
+  assert.match(r.message, /aborted/i);
+  assert.equal(e.status().reachable, false);
+});
+
+test("healthCheck: exact-tag match when model pins a version", async () => {
+  const e = createEmbedder({
+    model: "nomic-embed-text:v1.5",
+    fetchFn: async () => ({
+      ok: true,
+      json: async () => ({ models: [{ name: "nomic-embed-text:v1.5" }] }),
+    }),
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, true);
+  assert.equal(r.resolvedModel, "nomic-embed-text:v1.5");
+});
+
+test("healthCheck: pinned version absent -> MODEL_MISSING even if base name present", async () => {
+  const e = createEmbedder({
+    model: "nomic-embed-text:v1.5",
+    fetchFn: async () => ({
+      ok: true,
+      json: async () => ({ models: [{ name: "nomic-embed-text:latest" }] }),
+    }),
+  });
+  const r = await e.healthCheck();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "MODEL_MISSING");
+});
+
 test("summarize: returns trimmed text on ok response", async () => {
   const calls = [];
   const e = createEmbedder({

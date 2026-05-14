@@ -131,6 +131,8 @@ ollama pull llama3.2:3b   # for kb_suggest_links reasoning (optional)
 
 Embeddings populate automatically on startup and watcher updates. If Ollama is offline, regular search/list still work — only `kb_semantic` is affected.
 
+On boot the server probes Ollama via `/api/tags` (2s timeout) and logs the result. Three outcomes: `Ollama ready (<model>)` if the configured embedding model is installed; `WARN: model '<name>' not installed — run: ollama pull <name>` if Ollama is reachable but the model is missing; `WARN: Ollama unreachable at <url> — run: ollama serve` otherwise. The probe is non-blocking; the server starts regardless.
+
 `kb_suggest_links` uses the chat model `llama3.2:3b` (configurable via `llmModel` in `vault-ai.config.json`) for the per-suggestion reason. If the chat model is unavailable, suggestions still come back — just without the `why:` line.
 
 ### Observability

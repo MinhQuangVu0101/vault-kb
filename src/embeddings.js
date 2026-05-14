@@ -10,6 +10,7 @@ export function createEmbedder({
   llmModel = process.env.VAULT_KB_LLM_MODEL || null,
   logger = null,
   fetchFn = globalThis.fetch,
+  timeoutMs = 2000,
 } = {}) {
   let lastError = null;
   let reachable = null;
@@ -97,7 +98,55 @@ export function createEmbedder({
     return { url, model, llmModel, reachable, lastError };
   }
 
-  return { embedNote, embedQuery, contentHash, status, summarize };
+  async function healthCheck() {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      let res;
+      try {
+        res = await fetchFn(`${url}/api/tags`, { signal: ctrl.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+      if (!res.ok) {
+        reachable = false;
+        lastError = {
+          message: `HTTP ${res.status}`,
+          code: "UNREACHABLE",
+          ts: new Date().toISOString(),
+        };
+        return { ok: false, requestedModel: model, ...lastError };
+      }
+      const json = await res.json();
+      const names = (json.models ?? []).map((m) => m.name);
+      const found = model.includes(":")
+        ? names.find((n) => n === model)
+        : names.find((n) => n === model || n.startsWith(`${model}:`));
+      if (!found) {
+        reachable = true;
+        lastError = {
+          message: `model '${model}' not installed`,
+          code: "MODEL_MISSING",
+          ts: new Date().toISOString(),
+          availableModels: names,
+        };
+        return { ok: false, requestedModel: model, ...lastError };
+      }
+      reachable = true;
+      lastError = null;
+      return { ok: true, requestedModel: model, resolvedModel: found };
+    } catch (err) {
+      reachable = false;
+      lastError = {
+        message: String(err?.message ?? err),
+        code: "UNREACHABLE",
+        ts: new Date().toISOString(),
+      };
+      return { ok: false, requestedModel: model, ...lastError };
+    }
+  }
+
+  return { embedNote, embedQuery, contentHash, status, summarize, healthCheck };
 }
 
 export function floatsToBlob(floats) {

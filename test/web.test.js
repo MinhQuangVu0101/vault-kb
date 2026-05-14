@@ -229,3 +229,37 @@ test("GET /api/suggest-links returns 422 when source has no embedding", async ()
     await web.stop();
   }
 });
+
+test("GET /api/suggest-links with unknown path returns 404", async () => {
+  const vaultIndex = {
+    readNote: () => { throw new Error("Note not found: ghost.md"); },
+    findRelatedByPath: () => [],
+  };
+  const embedder = { async summarize() { return null; }, status() { return { llmModel: null }; } };
+  const web = createWebServer({ vaultIndex, embedder, statsSource: () => ({}), host: "127.0.0.1", port: 0 });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/suggest-links?path=ghost.md`);
+    assert.equal(res.status, 404);
+    const json = await res.json();
+    assert.match(json.error.message, /not found/i);
+  } finally {
+    await web.stop();
+  }
+});
+
+test("GET /api/suggest-links with limit > 20 returns 400", async () => {
+  const web = createWebServer({
+    vaultIndex: {}, embedder: {}, statsSource: () => ({}),
+    host: "127.0.0.1", port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/suggest-links?path=a.md&limit=99`);
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.match(json.error.message, /limit must be an integer/i);
+  } finally {
+    await web.stop();
+  }
+});

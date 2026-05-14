@@ -237,7 +237,7 @@ server.registerTool("kb_suggest_links", {
   description: "For a given note, return top-N similar notes that are NOT already linked (in or out), each with a one-sentence LLM-generated reason for why they might belong together. Requires embeddings populated and (optionally) an Ollama chat model for reasons.",
   inputSchema: {
     path: z.string().min(1),
-    limit: z.number().int().positive().optional(),
+    limit: z.number().int().min(1).max(20).optional(),
     minScore: z.number().min(0).max(1).optional(),
   },
 }, wrapTool("kb_suggest_links", async ({ path, limit, minScore }) => {

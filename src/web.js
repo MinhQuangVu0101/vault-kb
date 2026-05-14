@@ -107,6 +107,16 @@ export function createWebServer({
           if (!p) return sendError(res, 400, "path required");
           if (!embedder) return sendError(res, 503, "embedder disabled");
 
+          const rawLimit = q.get("limit");
+          let limitValue;
+          if (rawLimit != null) {
+            const n = Number(rawLimit);
+            if (!Number.isInteger(n) || n < 1 || n > 20) {
+              return sendError(res, 400, "limit must be an integer between 1 and 20");
+            }
+            limitValue = n;
+          }
+
           let minScore;
           const rawMinScore = q.get("minScore");
           if (rawMinScore != null) {
@@ -121,13 +131,14 @@ export function createWebServer({
               vaultIndex,
               embedder,
               path: p,
-              limit,
+              limit: limitValue,
               minScore,
             });
             return sendJson(res, 200, { rows });
           } catch (err) {
             const msg = String(err?.message ?? err);
             if (/no embedding/i.test(msg)) return sendError(res, 422, msg);
+            if (/not found/i.test(msg)) return sendError(res, 404, msg);
             return sendError(res, 500, msg);
           }
         }

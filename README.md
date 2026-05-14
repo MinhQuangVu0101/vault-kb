@@ -8,7 +8,7 @@ Only indexes notes with `ai-access: true` in frontmatter — everything else sta
 
 1. Scans your Obsidian vault for `.md` files with `ai-access: true`
 2. Indexes them into a local SQLite database (FTS5 full-text search)
-3. Exposes MCP tools: `kb_search`, `kb_read`, `kb_list`, `kb_ingest`, `kb_stats`
+3. Exposes 8 MCP tools (search, read, list, ingest, stats, semantic, bulk-update, suggest-links — see Usage below)
 4. AI tools can search and read your notes — locally, nothing leaves your machine
 
 ## Setup

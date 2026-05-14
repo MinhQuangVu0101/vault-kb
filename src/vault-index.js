@@ -232,6 +232,12 @@ export class VaultIndex {
     this.deleteEmbeddingStmt = this.db.prepare("DELETE FROM embeddings WHERE path = ?");
     this.countEmbeddingsStmt = this.db.prepare("SELECT COUNT(*) AS c FROM embeddings");
     this.listEmbeddingsStmt = this.db.prepare("SELECT path, vector FROM embeddings");
+    this.findRelatedRowsStmt = this.db.prepare(`
+      SELECT notes.path, notes.title, notes.folder, notes.tags_text, notes.excerpt,
+             notes.area, notes.type, notes.status, notes.updated,
+             embeddings.vector
+      FROM embeddings JOIN notes ON notes.path = embeddings.path
+    `);
     this.deleteLinksForSourceStmt = this.db.prepare("DELETE FROM links WHERE source = ?");
     this.insertLinkStmt = this.db.prepare(
       "INSERT INTO links (source, target, target_raw, unresolved) VALUES (?, ?, ?, ?)",
@@ -547,21 +553,14 @@ export class VaultIndex {
   }
 
   findRelatedByPath(sourcePath, { limit = 5, excludePaths = [] } = {}) {
-    const source = this.db
-      .prepare("SELECT vector FROM embeddings WHERE path = ?")
-      .get(sourcePath);
+    const source = this.getEmbeddingStmt.get(sourcePath);
     if (!source) {
       throw new Error(`No embedding for path: ${sourcePath}`);
     }
     const sourceVec = blobToFloats(source.vector);
     const exclude = new Set([sourcePath, ...excludePaths]);
 
-    const rows = this.db.prepare(`
-      SELECT notes.path, notes.title, notes.folder, notes.tags_text, notes.excerpt,
-             notes.area, notes.type, notes.status, notes.updated,
-             embeddings.vector
-      FROM embeddings JOIN notes ON notes.path = embeddings.path
-    `).all();
+    const rows = this.findRelatedRowsStmt.all();
 
     const scored = [];
     for (const row of rows) {

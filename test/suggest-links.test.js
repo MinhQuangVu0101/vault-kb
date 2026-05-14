@@ -103,3 +103,23 @@ test("suggestLinks: caps limit and orders by score desc", async () => {
   assert.equal(out[0].path, "c.md");
   assert.equal(out[1].path, "d.md");
 });
+
+test("suggestLinks: does not exclude unresolved outlinks from candidates", async () => {
+  const rows = [
+    { path: "a.md", title: "A", body: "alpha",
+      // Unresolved outlink with a path that COINCIDENTALLY matches a candidate.
+      // If the filter is broken (no !unresolved guard), b.md would be wrongly excluded.
+      outlinks: [{ path: "b.md", raw: "[[Missing]]", unresolved: true }],
+      backlinks: [], _score: 1 },
+    { path: "b.md", title: "B", body: "beta", _score: 0.8 },
+  ];
+  const out = await suggestLinks({
+    vaultIndex: fakeIndex(rows),
+    embedder: fakeEmbedder(),
+    path: "a.md",
+    limit: 5,
+    minScore: 0,
+  });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].path, "b.md");
+});

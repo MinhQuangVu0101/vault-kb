@@ -546,6 +546,34 @@ export class VaultIndex {
     return this.#annotateBacklinkCounts(top);
   }
 
+  findRelatedByPath(sourcePath, { limit = 5, excludePaths = [] } = {}) {
+    const source = this.db
+      .prepare("SELECT vector FROM embeddings WHERE path = ?")
+      .get(sourcePath);
+    if (!source) {
+      throw new Error(`No embedding for path: ${sourcePath}`);
+    }
+    const sourceVec = blobToFloats(source.vector);
+    const exclude = new Set([sourcePath, ...excludePaths]);
+
+    const rows = this.db.prepare(`
+      SELECT notes.path, notes.title, notes.folder, notes.tags_text, notes.excerpt,
+             notes.area, notes.type, notes.status, notes.updated,
+             embeddings.vector
+      FROM embeddings JOIN notes ON notes.path = embeddings.path
+    `).all();
+
+    const scored = [];
+    for (const row of rows) {
+      if (exclude.has(row.path)) continue;
+      const vec = blobToFloats(row.vector);
+      scored.push({ ...row, score: cosineSimilarity(sourceVec, vec) });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    const top = scored.slice(0, limit).map(({ vector, ...rest }) => rest);
+    return this.#annotateBacklinkCounts(top);
+  }
+
   ensureIndexed() {
     if (!this.getLastIngestedAt()) {
       return this.ingest();

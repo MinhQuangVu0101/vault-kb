@@ -27,6 +27,11 @@ header {
 }
 header h1 { margin: 0; font-size: 16px; font-weight: 600; }
 .stats { color: var(--muted); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.identity-badge { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.identity-badge.hidden { display: none; }
+.identity-badge .email { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.identity-badge a { color: var(--accent-2); text-decoration: none; cursor: pointer; }
+.identity-badge a:hover { text-decoration: underline; }
 
 .search {
   padding: 10px 18px;

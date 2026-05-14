@@ -9,6 +9,7 @@ const tagInput = $("tag");
 const goBtn = $("go");
 const backlinksList = $("backlinks-list");
 const suggestList = $("suggest-list");
+const identityBadge = $("identity-badge");
 
 let activePath = null;
 
@@ -122,6 +123,20 @@ async function loadSuggestions(path) {
   }
 }
 
+async function loadIdentity() {
+  try {
+    const json = await fetchJson("/api/identity");
+    if (!json.email) return;
+    identityBadge.innerHTML = `
+      <span class="email">📧 ${escape(json.email)}</span>
+      <a href="/cdn-cgi/access/logout">logout</a>
+    `;
+    identityBadge.classList.remove("hidden");
+  } catch (err) {
+    // /api/identity should never throw under normal conditions; leave badge hidden if it does.
+  }
+}
+
 async function openNote(p) {
   activePath = p;
   for (const el of results.querySelectorAll(".hit")) {
@@ -163,3 +178,4 @@ qInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); }
 
 loadStats();
 setInterval(loadStats, 5000);
+loadIdentity();

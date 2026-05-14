@@ -263,3 +263,43 @@ test("GET /api/suggest-links with limit > 20 returns 400", async () => {
     await web.stop();
   }
 });
+
+test("GET /api/identity returns email when Cloudflare header is present", async () => {
+  const web = createWebServer({
+    vaultIndex: {},
+    embedder: null,
+    statsSource: () => ({}),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/identity`, {
+      headers: { "cf-access-authenticated-user-email": "alice@example.com" },
+    });
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.email, "alice@example.com");
+  } finally {
+    await web.stop();
+  }
+});
+
+test("GET /api/identity returns email=null when header absent", async () => {
+  const web = createWebServer({
+    vaultIndex: {},
+    embedder: null,
+    statsSource: () => ({}),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/identity`);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.email, null);
+  } finally {
+    await web.stop();
+  }
+});

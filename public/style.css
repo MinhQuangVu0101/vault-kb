@@ -95,7 +95,7 @@ main { flex: 1; display: grid; grid-template-columns: minmax(260px, 340px) 1fr m
 
 #detail h2 { margin: 10px 0 2px; font-size: 18px; }
 #detail .path { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; margin-bottom: 10px; }
-#detail .links { margin: 14px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+#detail .links { margin: 14px 0; }
 #detail .links h3 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; }
 #detail .links ul { list-style: none; padding: 0; margin: 0; font-size: 12px; }
 #detail .links li { padding: 3px 0; }

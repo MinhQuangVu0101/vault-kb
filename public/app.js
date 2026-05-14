@@ -7,6 +7,8 @@ const modeSelect = $("mode");
 const folderInput = $("folder");
 const tagInput = $("tag");
 const goBtn = $("go");
+const backlinksList = $("backlinks-list");
+const suggestList = $("suggest-list");
 
 let activePath = null;
 
@@ -75,6 +77,49 @@ async function doSearch() {
   }
 }
 
+function renderBacklinks(note) {
+  const items = (note.backlinks ?? []);
+  if (!items.length) {
+    backlinksList.innerHTML = '<li class="hint">none</li>';
+    return;
+  }
+  backlinksList.innerHTML = items
+    .map((b) => `<li><a data-path="${escape(b.path)}">${escape(b.title ?? b.path)}</a></li>`)
+    .join("");
+  backlinksList.querySelectorAll("a[data-path]").forEach((a) => {
+    a.addEventListener("click", (e) => { e.preventDefault(); openNote(a.dataset.path); });
+  });
+}
+
+async function loadSuggestions(path) {
+  suggestList.innerHTML = '<li class="hint">Loading…</li>';
+  try {
+    const json = await fetchJson(`/api/suggest-links?path=${encodeURIComponent(path)}&limit=5`);
+    const rows = json.rows ?? [];
+    if (!rows.length) {
+      suggestList.innerHTML = '<li class="hint">No suggestions above threshold.</li>';
+      return;
+    }
+    suggestList.innerHTML = rows.map((r) => {
+      const reason = r.reason ? `<div class="reason">${escape(r.reason)}</div>` : "";
+      return `
+        <li class="suggestion">
+          <div class="title-row">
+            <a data-path="${escape(r.path)}">${escape(r.title)}</a>
+            <span class="badge">${Number(r.score).toFixed(2)}</span>
+          </div>
+          ${reason}
+        </li>
+      `;
+    }).join("");
+    suggestList.querySelectorAll("a[data-path]").forEach((a) => {
+      a.addEventListener("click", (e) => { e.preventDefault(); openNote(a.dataset.path); });
+    });
+  } catch (err) {
+    suggestList.innerHTML = `<li class="error">${escape(err.message)}</li>`;
+  }
+}
+
 async function openNote(p) {
   activePath = p;
   for (const el of results.querySelectorAll(".hit")) {
@@ -83,9 +128,6 @@ async function openNote(p) {
   detail.innerHTML = '<p class="hint">Loading…</p>';
   try {
     const note = await fetchJson(`/api/read?path=${encodeURIComponent(p)}`);
-    const backlinks = (note.backlinks ?? [])
-      .map((b) => `<li><a data-path="${escape(b.path)}">${escape(b.title ?? b.path)}</a></li>`)
-      .join("") || '<li class="unresolved">none</li>';
     const outlinks = (note.outlinks ?? [])
       .map((o) => o.unresolved
         ? `<li class="unresolved">[[${escape(o.raw)}]]</li>`
@@ -96,7 +138,6 @@ async function openNote(p) {
       <h2>${escape(note.title)}</h2>
       <div class="path">${escape(note.path)}${note.truncated ? ` · truncated at ${note.maxChars}` : ""}</div>
       <div class="links">
-        <div><h3>Backlinks (${(note.backlinks ?? []).length})</h3><ul>${backlinks}</ul></div>
         <div><h3>Outlinks (${(note.outlinks ?? []).length})</h3><ul>${outlinks}</ul></div>
       </div>
       <pre class="body"></pre>
@@ -108,6 +149,8 @@ async function openNote(p) {
         openNote(a.dataset.path);
       });
     });
+    renderBacklinks(note);
+    loadSuggestions(p);
   } catch (err) {
     detail.innerHTML = `<div class="error">${escape(err.message)}</div>`;
   }

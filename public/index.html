@@ -13,28 +13,60 @@
     <div id="identity-badge" class="identity-badge hidden"></div>
   </header>
 
-  <section class="search">
-    <div class="row">
-      <input id="q" type="search" placeholder="Search…" autofocus>
-      <select id="mode">
-        <option value="search">keyword</option>
-        <option value="semantic">semantic</option>
-      </select>
-      <button id="go">Search</button>
-    </div>
-    <div class="row small">
-      <input id="folder" placeholder="folder filter (optional)">
-      <input id="tag" placeholder="tag filter (optional)">
-    </div>
-  </section>
-
   <main>
-    <aside id="results" aria-label="Results"></aside>
-    <article id="detail" aria-label="Note detail"><p class="hint">Pick a result to see details.</p></article>
+    <nav id="view-nav" aria-label="Views">
+      <button class="view-tab active" data-view="search" type="button">Search</button>
+      <button class="view-tab" data-view="orphans" type="button">Orphans</button>
+      <button class="view-tab" data-view="dead-links" type="button">Dead Links</button>
+    </nav>
+
+    <section id="content-pane">
+      <section id="view-search" class="view">
+        <section class="search">
+          <div class="row">
+            <input id="q" type="search" placeholder="Search…" autofocus>
+            <select id="mode">
+              <option value="search">keyword</option>
+              <option value="semantic">semantic</option>
+            </select>
+            <button id="go">Search</button>
+          </div>
+          <div class="row small">
+            <input id="folder" placeholder="folder filter (optional)">
+            <input id="tag" placeholder="tag filter (optional)">
+          </div>
+        </section>
+        <div class="two-pane">
+          <aside id="results" class="pane-list" aria-label="Results"></aside>
+          <article id="detail" class="pane-detail" aria-label="Note detail"><p class="hint">Pick a result to see details.</p></article>
+        </div>
+      </section>
+
+      <section id="view-orphans" class="view hidden">
+        <div class="view-header"><h2>Orphan notes</h2><p class="hint">Notes with no incoming and no outgoing resolved links.</p></div>
+        <div class="two-pane">
+          <aside id="orphans-results" class="pane-list" aria-label="Orphans"></aside>
+          <article id="orphans-detail" class="pane-detail" aria-label="Orphan note detail"><p class="hint">Pick an orphan to see details.</p></article>
+        </div>
+      </section>
+
+      <section id="view-dead-links" class="view hidden">
+        <div class="view-header"><h2>Dead links</h2><p class="hint">Unresolved <code>[[references]]</code> grouped by source note.</p></div>
+        <div class="two-pane">
+          <aside id="dead-links-results" class="pane-list" aria-label="Dead links"></aside>
+          <article id="dead-links-detail" class="pane-detail" aria-label="Source note detail"><p class="hint">Pick a source to see details.</p></article>
+        </div>
+      </section>
+    </section>
+
     <aside id="connections" aria-label="Connections">
       <section id="backlinks-panel">
         <h3>Backlinks</h3>
         <ul id="backlinks-list"><li class="hint">—</li></ul>
+      </section>
+      <section id="related-panel">
+        <h3>Related</h3>
+        <ul id="related-list"><li class="hint">Pick a note to see related.</li></ul>
       </section>
       <section id="suggest-panel">
         <h3>Suggested Links</h3>

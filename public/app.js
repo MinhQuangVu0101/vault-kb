@@ -9,9 +9,29 @@ const tagInput = $("tag");
 const goBtn = $("go");
 const backlinksList = $("backlinks-list");
 const suggestList = $("suggest-list");
+const relatedList = $("related-list");
 const identityBadge = $("identity-badge");
+const viewNav = $("view-nav");
+const orphansResults = $("orphans-results");
+const orphansDetail = $("orphans-detail");
+const deadLinksResults = $("dead-links-results");
+const deadLinksDetail = $("dead-links-detail");
 
 let activePath = null;
+let activeView = "search";
+
+function switchView(name) {
+  if (!["search", "orphans", "dead-links"].includes(name)) return;
+  activeView = name;
+  for (const btn of viewNav.querySelectorAll(".view-tab")) {
+    btn.classList.toggle("active", btn.dataset.view === name);
+  }
+  for (const section of document.querySelectorAll("#content-pane .view")) {
+    section.classList.toggle("hidden", section.id !== `view-${name}`);
+  }
+  if (name === "orphans") loadOrphans();
+  else if (name === "dead-links") loadDeadLinks();
+}
 
 async function fetchJson(url) {
   const res = await fetch(url);
@@ -125,6 +145,33 @@ async function loadSuggestions(path) {
   }
 }
 
+async function loadRelated(path) {
+  relatedList.innerHTML = '<li class="hint">Loading…</li>';
+  try {
+    const json = await fetchJson(`/api/related?path=${encodeURIComponent(path)}&limit=5`);
+    if (activePath !== path) return;
+    const rows = json.rows ?? [];
+    if (!rows.length) {
+      relatedList.innerHTML = '<li class="hint">No related notes.</li>';
+      return;
+    }
+    relatedList.innerHTML = rows.map((r) => `
+      <li class="suggestion">
+        <div class="title-row">
+          <a data-path="${escape(r.path)}">${escape(r.title)}</a>
+          <span class="badge">${Number(r.score).toFixed(2)}</span>
+        </div>
+      </li>
+    `).join("");
+    relatedList.querySelectorAll("a[data-path]").forEach((a) => {
+      a.addEventListener("click", (e) => { e.preventDefault(); openNote(a.dataset.path); });
+    });
+  } catch (err) {
+    if (activePath !== path) return;
+    relatedList.innerHTML = `<li class="error">${escape(err.message)}</li>`;
+  }
+}
+
 async function loadIdentity() {
   try {
     const json = await fetchJson("/api/identity");
@@ -139,13 +186,67 @@ async function loadIdentity() {
   }
 }
 
-async function openNote(p) {
+async function loadOrphans() {
+  orphansResults.innerHTML = '<p class="hint">Loading…</p>';
+  try {
+    const json = await fetchJson("/api/orphans?limit=50");
+    const rows = json.rows ?? [];
+    if (!rows.length) {
+      orphansResults.innerHTML = '<p class="hint">No orphan notes.</p>';
+      return;
+    }
+    orphansResults.innerHTML = "";
+    for (const row of rows) {
+      const el = document.createElement("div");
+      el.className = "hit";
+      el.innerHTML = `
+        <div class="title">${escape(row.title)}</div>
+        <div class="path">${escape(row.path)}</div>
+        <div class="meta">${escape([row.type, row.area, row.status, row.updated].filter(Boolean).join(" · "))}</div>
+      `;
+      el.addEventListener("click", () => openNote(row.path, { targetPane: orphansDetail }));
+      orphansResults.appendChild(el);
+    }
+  } catch (err) {
+    orphansResults.innerHTML = `<div class="error">${escape(err.message)}</div>`;
+  }
+}
+
+async function loadDeadLinks() {
+  deadLinksResults.innerHTML = '<p class="hint">Loading…</p>';
+  try {
+    const json = await fetchJson("/api/dead-links?limit=50");
+    const rows = json.rows ?? [];
+    if (!rows.length) {
+      deadLinksResults.innerHTML = '<p class="hint">No dead links.</p>';
+      return;
+    }
+    deadLinksResults.innerHTML = "";
+    for (const row of rows) {
+      const el = document.createElement("div");
+      el.className = "hit";
+      const brokenList = row.broken.map((r) => `[[${escape(r)}]]`).join(", ");
+      el.innerHTML = `
+        <div class="title">${escape(row.title)}</div>
+        <div class="path">${escape(row.path)}</div>
+        <div class="meta broken">${brokenList}</div>
+      `;
+      el.addEventListener("click", () => openNote(row.path, { targetPane: deadLinksDetail }));
+      deadLinksResults.appendChild(el);
+    }
+  } catch (err) {
+    deadLinksResults.innerHTML = `<div class="error">${escape(err.message)}</div>`;
+  }
+}
+
+async function openNote(p, { targetPane } = {}) {
+  const pane = targetPane ?? detail;
   activePath = p;
   document.body.classList.add("note-open");
   for (const el of results.querySelectorAll(".hit")) {
     el.classList.toggle("active", el.querySelector(".path")?.textContent === p);
   }
-  detail.innerHTML = '<p class="hint">Loading…</p>';
+  pane.innerHTML = '<p class="hint">Loading…</p>';
   try {
     const note = await fetchJson(`/api/read?path=${encodeURIComponent(p)}`);
     const outlinks = (note.outlinks ?? [])
@@ -154,7 +255,7 @@ async function openNote(p) {
         : `<li><a data-path="${escape(o.path)}">${escape(o.title ?? o.path)}</a></li>`)
       .join("") || '<li class="unresolved">none</li>';
 
-    detail.innerHTML = `
+    pane.innerHTML = `
       <button class="back-to-results" type="button" aria-label="Back to results">←</button>
       <h2>${escape(note.title)}</h2>
       <div class="path">${escape(note.path)}${note.truncated ? ` · truncated at ${note.maxChars}` : ""}</div>
@@ -163,26 +264,24 @@ async function openNote(p) {
       </div>
       <pre class="body"></pre>
     `;
-    detail.querySelector(".back-to-results")?.addEventListener("click", () => {
+    pane.querySelector("pre.body").textContent = note.rawContent;
+    pane.querySelectorAll("a[data-path]").forEach((a) => {
+      a.addEventListener("click", (e) => { e.preventDefault(); openNote(a.dataset.path, { targetPane }); });
+    });
+    pane.querySelector(".back-to-results")?.addEventListener("click", () => {
       activePath = null;
       document.body.classList.remove("note-open");
       for (const el of results.querySelectorAll(".hit")) el.classList.remove("active");
     });
-    detail.querySelector("pre.body").textContent = note.rawContent;
-    detail.querySelectorAll("a[data-path]").forEach((a) => {
-      a.addEventListener("click", (e) => {
-        e.preventDefault();
-        openNote(a.dataset.path);
-      });
-    });
     renderBacklinks(note);
     loadSuggestions(p);
+    loadRelated(p);
   } catch (err) {
-    detail.innerHTML = `
-    <button class="back-to-results" type="button" aria-label="Back to results">←</button>
-    <div class="error">${escape(err.message)}</div>
-  `;
-    detail.querySelector(".back-to-results")?.addEventListener("click", () => {
+    pane.innerHTML = `
+      <button class="back-to-results" type="button" aria-label="Back to results">←</button>
+      <div class="error">${escape(err.message)}</div>
+    `;
+    pane.querySelector(".back-to-results")?.addEventListener("click", () => {
       activePath = null;
       document.body.classList.remove("note-open");
       for (const el of results.querySelectorAll(".hit")) el.classList.remove("active");
@@ -192,6 +291,10 @@ async function openNote(p) {
 
 goBtn.addEventListener("click", doSearch);
 qInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
+
+for (const btn of viewNav.querySelectorAll(".view-tab")) {
+  btn.addEventListener("click", () => switchView(btn.dataset.view));
+}
 
 loadStats();
 setInterval(loadStats, 5000);

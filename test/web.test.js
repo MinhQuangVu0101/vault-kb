@@ -285,6 +285,58 @@ test("GET /api/identity returns email when Cloudflare header is present", async 
   }
 });
 
+test("GET /api/related returns rows for a path", async () => {
+  const vaultIndex = {
+    findRelatedByPath: () => [{ path: "b.md", title: "B", excerpt: "body of B", score: 0.9 }],
+  };
+  const embedder = { status() { return { llmModel: null }; } };
+  const web = createWebServer({
+    vaultIndex,
+    embedder,
+    statsSource: () => ({}),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/related?path=a.md&limit=3`);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.rows.length, 1);
+    assert.equal(json.rows[0].path, "b.md");
+  } finally {
+    await web.stop();
+  }
+});
+
+test("GET /api/related without path returns 400", async () => {
+  const web = createWebServer({
+    vaultIndex: {}, embedder: {}, statsSource: () => ({}),
+    host: "127.0.0.1", port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/related`);
+    assert.equal(res.status, 400);
+  } finally {
+    await web.stop();
+  }
+});
+
+test("GET /api/related without embedder returns 503", async () => {
+  const web = createWebServer({
+    vaultIndex: {}, embedder: null, statsSource: () => ({}),
+    host: "127.0.0.1", port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/related?path=a.md`);
+    assert.equal(res.status, 503);
+  } finally {
+    await web.stop();
+  }
+});
+
 test("GET /api/identity returns email=null when header absent", async () => {
   const web = createWebServer({
     vaultIndex: {},
@@ -299,6 +351,85 @@ test("GET /api/identity returns email=null when header absent", async () => {
     assert.equal(res.status, 200);
     const json = await res.json();
     assert.equal(json.email, null);
+  } finally {
+    await web.stop();
+  }
+});
+
+test("GET /api/orphans returns rows", async () => {
+  const vaultIndex = {
+    findOrphans: ({ limit }) => [
+      { path: "orphan.md", title: "Orphan", folder: "", tags_text: "", excerpt: "", area: "", type: "note", status: "active", updated: "2026-05-01" },
+    ],
+  };
+  const web = createWebServer({
+    vaultIndex,
+    embedder: null,
+    statsSource: () => ({}),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/orphans?limit=10`);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.rows.length, 1);
+    assert.equal(json.rows[0].path, "orphan.md");
+  } finally {
+    await web.stop();
+  }
+});
+
+test("GET /api/orphans with out-of-range limit returns 400", async () => {
+  const web = createWebServer({
+    vaultIndex: {}, embedder: null, statsSource: () => ({}),
+    host: "127.0.0.1", port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/orphans?limit=999`);
+    assert.equal(res.status, 400);
+  } finally {
+    await web.stop();
+  }
+});
+
+test("GET /api/dead-links returns rows", async () => {
+  const vaultIndex = {
+    findDeadLinks: ({ limit }) => [
+      { path: "a.md", title: "Alpha", broken: ["Ghost", "Missing"] },
+    ],
+  };
+  const web = createWebServer({
+    vaultIndex,
+    embedder: null,
+    statsSource: () => ({}),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/dead-links?limit=10`);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.rows.length, 1);
+    assert.equal(json.rows[0].path, "a.md");
+    assert.deepEqual(json.rows[0].broken, ["Ghost", "Missing"]);
+  } finally {
+    await web.stop();
+  }
+});
+
+test("GET /api/dead-links with out-of-range limit returns 400", async () => {
+  const web = createWebServer({
+    vaultIndex: {}, embedder: null, statsSource: () => ({}),
+    host: "127.0.0.1", port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/dead-links?limit=0`);
+    assert.equal(res.status, 400);
   } finally {
     await web.stop();
   }

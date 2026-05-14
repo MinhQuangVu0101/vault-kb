@@ -573,6 +573,64 @@ export class VaultIndex {
     return this.#annotateBacklinkCounts(top);
   }
 
+  findOrphans({ limit = 50 } = {}) {
+    const allPaths = this.db.prepare("SELECT path FROM notes").all().map((r) => r.path);
+    if (allPaths.length === 0) return [];
+    const resolve = buildResolver(allPaths);
+
+    const linkedTo = new Set();
+    const linkedFrom = new Set();
+    const rows = this.db.prepare("SELECT path, body FROM notes").all();
+    for (const note of rows) {
+      const refs = parseLinks(note.body);
+      let any = false;
+      for (const raw of refs) {
+        const resolved = resolve(raw);
+        if (resolved) {
+          linkedTo.add(resolved);
+          any = true;
+        }
+      }
+      if (any) linkedFrom.add(note.path);
+    }
+
+    const orphanPaths = allPaths.filter((p) => !linkedTo.has(p) && !linkedFrom.has(p));
+    if (orphanPaths.length === 0) return [];
+
+    const placeholders = orphanPaths.map(() => "?").join(",");
+    const orphanRows = this.db.prepare(`
+      SELECT path, title, folder, tags_text, excerpt, area, type, status, updated
+      FROM notes
+      WHERE path IN (${placeholders})
+      ORDER BY updated DESC
+      LIMIT ?
+    `).all(...orphanPaths, limit);
+    return orphanRows;
+  }
+
+  findDeadLinks({ limit = 50 } = {}) {
+    const allPaths = this.db.prepare("SELECT path FROM notes").all().map((r) => r.path);
+    if (allPaths.length === 0) return [];
+    const resolve = buildResolver(allPaths);
+
+    const grouped = new Map();
+    const rows = this.db.prepare("SELECT path, title, body FROM notes").all();
+    for (const note of rows) {
+      const refs = parseLinks(note.body);
+      const broken = [];
+      for (const raw of refs) {
+        if (!resolve(raw)) broken.push(raw);
+      }
+      if (broken.length > 0) {
+        grouped.set(note.path, { path: note.path, title: note.title, broken });
+      }
+    }
+
+    return Array.from(grouped.values())
+      .sort((a, b) => a.path.localeCompare(b.path))
+      .slice(0, limit);
+  }
+
   ensureIndexed() {
     if (!this.getLastIngestedAt()) {
       return this.ingest();

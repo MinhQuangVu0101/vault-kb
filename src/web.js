@@ -142,6 +142,79 @@ export function createWebServer({
             return sendError(res, 500, msg);
           }
         }
+        case "/api/related": {
+          const p = q.get("path");
+          if (!p) return sendError(res, 400, "path required");
+          if (!embedder) return sendError(res, 503, "embedder disabled");
+
+          const rawLimit = q.get("limit");
+          let limitValue;
+          if (rawLimit != null) {
+            const n = Number(rawLimit);
+            if (!Number.isInteger(n) || n < 1 || n > 20) {
+              return sendError(res, 400, "limit must be an integer between 1 and 20");
+            }
+            limitValue = n;
+          }
+
+          let minScoreValue;
+          const rawMinScore = q.get("minScore");
+          if (rawMinScore != null) {
+            const n = Number(rawMinScore);
+            if (Number.isNaN(n)) return sendError(res, 400, "minScore must be a number");
+            minScoreValue = n;
+          }
+
+          try {
+            const { relatedNotes } = await import("./related.js");
+            const rows = await relatedNotes({
+              vaultIndex,
+              path: p,
+              limit: limitValue,
+              minScore: minScoreValue,
+            });
+            return sendJson(res, 200, { rows });
+          } catch (err) {
+            const msg = String(err?.message ?? err);
+            if (/no embedding/i.test(msg)) return sendError(res, 422, msg);
+            if (/not found/i.test(msg)) return sendError(res, 404, msg);
+            return sendError(res, 500, msg);
+          }
+        }
+        case "/api/orphans": {
+          const rawLimit = q.get("limit");
+          let limitValue = 50;
+          if (rawLimit != null) {
+            const n = Number(rawLimit);
+            if (!Number.isInteger(n) || n < 1 || n > 200) {
+              return sendError(res, 400, "limit must be an integer between 1 and 200");
+            }
+            limitValue = n;
+          }
+          try {
+            const rows = vaultIndex.findOrphans({ limit: limitValue });
+            return sendJson(res, 200, { rows });
+          } catch (err) {
+            return sendError(res, 500, String(err?.message ?? err));
+          }
+        }
+        case "/api/dead-links": {
+          const rawLimit = q.get("limit");
+          let limitValue = 50;
+          if (rawLimit != null) {
+            const n = Number(rawLimit);
+            if (!Number.isInteger(n) || n < 1 || n > 200) {
+              return sendError(res, 400, "limit must be an integer between 1 and 200");
+            }
+            limitValue = n;
+          }
+          try {
+            const rows = vaultIndex.findDeadLinks({ limit: limitValue });
+            return sendJson(res, 200, { rows });
+          } catch (err) {
+            return sendError(res, 500, String(err?.message ?? err));
+          }
+        }
         case "/api/identity": {
           const email = req.headers["cf-access-authenticated-user-email"] ?? null;
           return sendJson(res, 200, { email });

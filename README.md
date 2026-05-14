@@ -116,6 +116,9 @@ Once configured, your AI tool can:
 - **`kb_ingest`** — Rebuild the index
 - **`kb_bulk_update`** — Batch frontmatter edits with dry-run + revert bundle
 - **`kb_suggest_links`** — Top-N similar notes that are NOT already linked, each with a one-sentence LLM-generated reason (via local Ollama chat model)
+- **`kb_related`** — Top-N similar notes for a given path, no link-graph filtering. Passive discovery; sibling of `kb_suggest_links`
+- **`kb_orphans`** — Vault-wide list of notes with no incoming and no outgoing resolved links
+- **`kb_dead_links`** — Vault-wide list of unresolved `[[references]]`, grouped by source note
 - **`kb_stats`** — Index health: counts, skip breakdown, watcher state, embedding coverage
 
 ### Semantic search (optional)

@@ -7,6 +7,7 @@ const MAX_CHARS = 4000;
 export function createEmbedder({
   url = process.env.VAULT_KB_OLLAMA_URL || DEFAULT_URL,
   model = process.env.VAULT_KB_EMBED_MODEL || DEFAULT_MODEL,
+  llmModel = process.env.VAULT_KB_LLM_MODEL || null,
   logger = null,
   fetchFn = globalThis.fetch,
 } = {}) {
@@ -69,11 +70,34 @@ export function createEmbedder({
     return embed(text);
   }
 
-  function status() {
-    return { url, model, reachable, lastError };
+  async function summarize(prompt) {
+    if (!llmModel) return null;
+    try {
+      const res = await fetchFn(`${url}/api/generate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: llmModel, prompt, stream: false }),
+      });
+      if (!res.ok) {
+        lastError = { message: `ollama generate ${res.status}`, ts: new Date().toISOString() };
+        logger?.warn({ event: "summarize_failed", status: res.status });
+        return null;
+      }
+      const json = await res.json();
+      const text = typeof json.response === "string" ? json.response.trim() : null;
+      return text || null;
+    } catch (err) {
+      lastError = { message: String(err?.message ?? err), ts: new Date().toISOString() };
+      logger?.warn({ event: "summarize_error", error: lastError.message });
+      return null;
+    }
   }
 
-  return { embedNote, embedQuery, contentHash, status };
+  function status() {
+    return { url, model, llmModel, reachable, lastError };
+  }
+
+  return { embedNote, embedQuery, contentHash, status, summarize };
 }
 
 export function floatsToBlob(floats) {

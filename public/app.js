@@ -95,6 +95,7 @@ async function loadSuggestions(path) {
   suggestList.innerHTML = '<li class="hint">Loading…</li>';
   try {
     const json = await fetchJson(`/api/suggest-links?path=${encodeURIComponent(path)}&limit=5`);
+    if (activePath !== path) return;
     const rows = json.rows ?? [];
     if (!rows.length) {
       suggestList.innerHTML = '<li class="hint">No suggestions above threshold.</li>';
@@ -116,6 +117,7 @@ async function loadSuggestions(path) {
       a.addEventListener("click", (e) => { e.preventDefault(); openNote(a.dataset.path); });
     });
   } catch (err) {
+    if (activePath !== path) return;
     suggestList.innerHTML = `<li class="error">${escape(err.message)}</li>`;
   }
 }

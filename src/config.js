@@ -32,6 +32,7 @@ const configSchema = z.object({
     list: 100,
     readChars: 40000,
   }),
+  llmModel: z.string().min(1).default("llama3.2:3b"),
 });
 
 function toPosixPath(value) {

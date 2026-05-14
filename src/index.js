@@ -12,6 +12,7 @@ import { createWatcher } from "./watcher.js";
 import { runBulkUpdate } from "./bulk.js";
 import { createEmbedder } from "./embeddings.js";
 import { createWebServer } from "./web.js";
+import { suggestLinks } from "./suggest-links.js";
 
 function formatList(rows) {
   if (rows.length === 0) {
@@ -75,7 +76,11 @@ const args = new Set(process.argv.slice(2));
 const config = loadConfig();
 const logger = createLogger();
 const stats = createStats();
-const embedder = args.has("--no-embed") ? null : createEmbedder({ logger });
+const llmEnabled = !args.has("--no-llm-summary");
+const embedder = args.has("--no-embed") ? null : createEmbedder({
+  logger,
+  llmModel: llmEnabled ? config.llmModel : null,
+});
 const vaultIndex = new VaultIndex(config, { logger, stats, embedder });
 logger.info({ event: "startup", vaultRoot: config.vaultRoot, source: config.vaultRootSource });
 
@@ -147,6 +152,7 @@ let web = null;
 if (args.has("--web")) {
   web = createWebServer({
     vaultIndex,
+    embedder,
     logger,
     statsSource: () => ({
       vaultRoot: config.vaultRoot,
@@ -156,7 +162,7 @@ if (args.has("--web")) {
       embeddings: {
         covered: vaultIndex.embeddingsCount(),
         total: stats.snapshot().indexed,
-        ...(embedder ? embedder.status() : { model: null, reachable: null, lastError: null }),
+        ...(embedder ? embedder.status() : { model: null, llmModel: null, reachable: null, lastError: null }),
       },
       ...stats.snapshot(),
     }),
@@ -243,6 +249,29 @@ server.registerTool("kb_semantic", {
   return toolText(formatList(rows.map((r) => ({ ...r, snippet: r.excerpt, score: r.score.toFixed(3) }))));
 }));
 
+server.registerTool("kb_suggest_links", {
+  title: "Suggest missing links",
+  description: "For a given note, return top-N similar notes that are NOT already linked (in or out), each with a one-sentence LLM-generated reason for why they might belong together. Requires embeddings populated and (optionally) an Ollama chat model for reasons.",
+  inputSchema: {
+    path: z.string().min(1),
+    limit: z.number().int().min(1).max(20).optional(),
+    minScore: z.number().min(0).max(1).optional(),
+  },
+}, wrapTool("kb_suggest_links", async ({ path, limit, minScore }) => {
+  if (!embedder) {
+    return toolText("Embedder disabled (--no-embed). kb_suggest_links is unavailable.");
+  }
+  const rows = await suggestLinks({ vaultIndex, embedder, path, limit, minScore });
+  if (rows.length === 0) {
+    return toolText("No link suggestions above threshold.");
+  }
+  const lines = rows.map((r, i) => {
+    const reason = r.reason ? `\n   why: ${r.reason}` : "";
+    return `${i + 1}. ${r.title}\n   path: ${r.path}\n   score: ${r.score.toFixed(3)}${reason}`;
+  });
+  return toolText(lines.join("\n\n"));
+}));
+
 server.registerTool("kb_bulk_update", {
   title: "Bulk update note frontmatter",
   description: "Match notes by folder/tag/frontmatter/paths and apply frontmatter ops (addTags, removeTags, setFields, unsetFields, setAccess). Dry-run unless apply=true. Writes a revert bundle when applied.",
@@ -284,7 +313,7 @@ server.registerTool("kb_stats", {
     embeddings: {
       covered: vaultIndex.embeddingsCount(),
       total: snap.indexed,
-      ...(embedder ? embedder.status() : { model: null, reachable: null, lastError: null }),
+      ...(embedder ? embedder.status() : { model: null, llmModel: null, reachable: null, lastError: null }),
     },
     ...snap,
   }, null, 2));

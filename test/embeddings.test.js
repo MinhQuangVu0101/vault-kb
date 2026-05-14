@@ -183,3 +183,50 @@ test("healthCheck: pinned version absent -> MODEL_MISSING even if base name pres
   assert.equal(r.ok, false);
   assert.equal(r.code, "MODEL_MISSING");
 });
+
+test("summarize: returns trimmed text on ok response", async () => {
+  const calls = [];
+  const e = createEmbedder({
+    fetchFn: async (url, init) => {
+      calls.push({ url, body: JSON.parse(init.body) });
+      return { ok: true, json: async () => ({ response: "  one sentence answer  " }) };
+    },
+    llmModel: "llama3.2:3b",
+  });
+  const text = await e.summarize("any prompt");
+  assert.equal(text, "one sentence answer");
+  assert.match(calls[0].url, /\/api\/generate$/);
+  assert.equal(calls[0].body.model, "llama3.2:3b");
+  assert.equal(calls[0].body.stream, false);
+  assert.equal(calls[0].body.prompt, "any prompt");
+});
+
+test("summarize: returns null on fetch failure", async () => {
+  const e = createEmbedder({
+    fetchFn: async () => { throw new Error("ECONNREFUSED"); },
+    llmModel: "llama3.2:3b",
+  });
+  assert.equal(await e.summarize("prompt"), null);
+});
+
+test("summarize: returns null on non-ok response", async () => {
+  const e = createEmbedder({
+    fetchFn: async () => ({ ok: false, status: 500, text: async () => "boom" }),
+    llmModel: "llama3.2:3b",
+  });
+  assert.equal(await e.summarize("prompt"), null);
+});
+
+test("summarize: returns null when llmModel is unset", async () => {
+  const calls = [];
+  const e = createEmbedder({
+    fetchFn: async (url) => { calls.push(url); return { ok: true, json: async () => ({ response: "x" }) }; },
+  });
+  assert.equal(await e.summarize("prompt"), null);
+  assert.equal(calls.length, 0, "should not call ollama when llmModel is unset");
+});
+
+test("status: exposes llmModel", () => {
+  const e = createEmbedder({ fetchFn: async () => ({ ok: true, json: async () => ({}) }), llmModel: "gemma3:4b" });
+  assert.equal(e.status().llmModel, "gemma3:4b");
+});

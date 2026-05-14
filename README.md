@@ -135,6 +135,60 @@ On boot the server probes Ollama via `/api/tags` (2s timeout) and logs the resul
 
 `kb_suggest_links` uses the chat model `llama3.2:3b` (configurable via `llmModel` in `vault-ai.config.json`) for the per-suggestion reason. If the chat model is unavailable, suggestions still come back — just without the `why:` line.
 
+### Remote access (optional)
+
+To use the dashboard from anywhere — laptop on the road, phone, iPad — without putting the vault on a public server, run vault-kb on your Mac behind a Cloudflare Tunnel gated by Cloudflare Access. Cloudflare handles login (email-OTP, restricted to your address); vault-kb keeps binding to `127.0.0.1`.
+
+Prereqs: a Cloudflare account and at least one domain on Cloudflare. The dashboard will live at `vault.<your-domain>`.
+
+```bash
+brew install cloudflared
+cloudflared tunnel login
+cloudflared tunnel create vault-kb
+```
+
+The `create` command prints a tunnel UUID. Create `~/.cloudflared/config.yml`:
+
+```yaml
+tunnel: <UUID from previous step>
+credentials-file: /Users/<you>/.cloudflared/<UUID>.json
+ingress:
+  - hostname: vault.<your-domain>
+    service: http://localhost:7345
+  - service: http_status:404
+```
+
+Route DNS through the tunnel and verify:
+
+```bash
+cloudflared tunnel route dns vault-kb vault.<your-domain>
+cloudflared tunnel run vault-kb
+```
+
+The dashboard is now reachable at `https://vault.<your-domain>` — but it is **public until you add an Access policy**. Open the Cloudflare dashboard → Zero Trust → Access → Applications → Add an application:
+
+- Type: **Self-hosted**
+- Application name: `vault-kb`
+- Subdomain: `vault`, Domain: `<your-domain>`, Path: (empty)
+- Identity providers: **One-time PIN** (enabled by default)
+- Add policy → Action: **Allow** → Include: **Emails** → `<your-email>@gmail.com`
+
+Reload `https://vault.<your-domain>` — Cloudflare prompts for the email, sends a 6-digit code, redirects you to the dashboard. The auth badge in the top-right shows your email and a logout link.
+
+Finally, install `cloudflared` as a launchd service so the tunnel survives reboots:
+
+```bash
+sudo cloudflared service install
+```
+
+Set `VAULT_KB_PUBLIC_URL` in your vault-kb startup environment so the boot log shows the public URL alongside the local one:
+
+```bash
+export VAULT_KB_PUBLIC_URL=https://vault.<your-domain>
+```
+
+For troubleshooting tunnel connectivity, DNS routing, or Access policy details, see the [Cloudflare Tunnel docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) and the [Cloudflare Access docs](https://developers.cloudflare.com/cloudflare-one/applications/).
+
 ### Observability
 
 Every tool call is logged as a JSON line to `~/.cache/vault-kb/vault-kb.log` (rotates at 10MB). Failures also show up in `kb_stats.recentErrors` (last 20).

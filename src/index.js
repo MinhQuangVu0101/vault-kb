@@ -168,7 +168,13 @@ if (args.has("--web")) {
     }),
   });
   const info = await web.start();
-  console.error(`[vault-mcp] Web UI: http://${info.host}:${info.port}`);
+  const publicUrl = process.env.VAULT_KB_PUBLIC_URL;
+  const local = `http://${info.host}:${info.port}`;
+  console.error(
+    publicUrl
+      ? `[vault-mcp] Web UI: ${local} · public: ${publicUrl}`
+      : `[vault-mcp] Web UI: ${local}`,
+  );
 }
 
 const server = new McpServer({

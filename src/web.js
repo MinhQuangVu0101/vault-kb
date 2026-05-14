@@ -142,6 +142,10 @@ export function createWebServer({
             return sendError(res, 500, msg);
           }
         }
+        case "/api/identity": {
+          const email = req.headers["cf-access-authenticated-user-email"] ?? null;
+          return sendJson(res, 200, { email });
+        }
         default:
           return sendError(res, 404, "unknown endpoint");
       }

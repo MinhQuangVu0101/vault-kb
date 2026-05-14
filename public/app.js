@@ -9,6 +9,7 @@ const tagInput = $("tag");
 const goBtn = $("go");
 const backlinksList = $("backlinks-list");
 const suggestList = $("suggest-list");
+const identityBadge = $("identity-badge");
 
 let activePath = null;
 
@@ -64,6 +65,8 @@ function escape(s) {
 async function doSearch() {
   const q = qInput.value.trim();
   if (!q) return;
+  document.body.classList.remove("note-open");
+  activePath = null;
   const mode = modeSelect.value;
   const params = new URLSearchParams({ q });
   if (folderInput.value.trim()) params.set("folder", folderInput.value.trim());
@@ -122,8 +125,23 @@ async function loadSuggestions(path) {
   }
 }
 
+async function loadIdentity() {
+  try {
+    const json = await fetchJson("/api/identity");
+    if (!json.email) return;
+    identityBadge.innerHTML = `
+      <span class="email">📧 ${escape(json.email)}</span>
+      <a href="/cdn-cgi/access/logout">logout</a>
+    `;
+    identityBadge.classList.remove("hidden");
+  } catch (err) {
+    // /api/identity should never throw under normal conditions; leave badge hidden if it does.
+  }
+}
+
 async function openNote(p) {
   activePath = p;
+  document.body.classList.add("note-open");
   for (const el of results.querySelectorAll(".hit")) {
     el.classList.toggle("active", el.querySelector(".path")?.textContent === p);
   }
@@ -137,6 +155,7 @@ async function openNote(p) {
       .join("") || '<li class="unresolved">none</li>';
 
     detail.innerHTML = `
+      <button class="back-to-results" type="button" aria-label="Back to results">←</button>
       <h2>${escape(note.title)}</h2>
       <div class="path">${escape(note.path)}${note.truncated ? ` · truncated at ${note.maxChars}` : ""}</div>
       <div class="links">
@@ -144,6 +163,11 @@ async function openNote(p) {
       </div>
       <pre class="body"></pre>
     `;
+    detail.querySelector(".back-to-results")?.addEventListener("click", () => {
+      activePath = null;
+      document.body.classList.remove("note-open");
+      for (const el of results.querySelectorAll(".hit")) el.classList.remove("active");
+    });
     detail.querySelector("pre.body").textContent = note.rawContent;
     detail.querySelectorAll("a[data-path]").forEach((a) => {
       a.addEventListener("click", (e) => {
@@ -154,7 +178,15 @@ async function openNote(p) {
     renderBacklinks(note);
     loadSuggestions(p);
   } catch (err) {
-    detail.innerHTML = `<div class="error">${escape(err.message)}</div>`;
+    detail.innerHTML = `
+    <button class="back-to-results" type="button" aria-label="Back to results">←</button>
+    <div class="error">${escape(err.message)}</div>
+  `;
+    detail.querySelector(".back-to-results")?.addEventListener("click", () => {
+      activePath = null;
+      document.body.classList.remove("note-open");
+      for (const el of results.querySelectorAll(".hit")) el.classList.remove("active");
+    });
   }
 }
 
@@ -163,3 +195,4 @@ qInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); }
 
 loadStats();
 setInterval(loadStats, 5000);
+loadIdentity();

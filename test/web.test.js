@@ -355,3 +355,42 @@ test("GET /api/identity returns email=null when header absent", async () => {
     await web.stop();
   }
 });
+
+test("GET /api/orphans returns rows", async () => {
+  const vaultIndex = {
+    findOrphans: ({ limit }) => [
+      { path: "orphan.md", title: "Orphan", folder: "", tags_text: "", excerpt: "", area: "", type: "note", status: "active", updated: "2026-05-01" },
+    ],
+  };
+  const web = createWebServer({
+    vaultIndex,
+    embedder: null,
+    statsSource: () => ({}),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/orphans?limit=10`);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.rows.length, 1);
+    assert.equal(json.rows[0].path, "orphan.md");
+  } finally {
+    await web.stop();
+  }
+});
+
+test("GET /api/orphans with out-of-range limit returns 400", async () => {
+  const web = createWebServer({
+    vaultIndex: {}, embedder: null, statsSource: () => ({}),
+    host: "127.0.0.1", port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/orphans?limit=999`);
+    assert.equal(res.status, 400);
+  } finally {
+    await web.stop();
+  }
+});

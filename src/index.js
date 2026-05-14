@@ -301,6 +301,25 @@ server.registerTool("kb_related", {
   return toolText(lines.join("\n\n"));
 }));
 
+server.registerTool("kb_orphans", {
+  title: "Find orphan notes",
+  description: "List notes with no incoming and no outgoing resolved links. Vault-wide cleanup query. Sort: most recently updated first.",
+  inputSchema: {
+    limit: z.number().int().min(1).max(200).optional(),
+  },
+}, wrapTool("kb_orphans", async ({ limit }) => {
+  const rows = vaultIndex.findOrphans({ limit: limit ?? 50 });
+  if (rows.length === 0) {
+    return toolText("No orphan notes found.");
+  }
+  const lines = rows.map((r, i) => {
+    const tags = r.tags_text ? `tags: ${r.tags_text}` : "tags: -";
+    const meta = [r.type || "-", r.area || "-", r.status || "-", r.updated || "-"].join(" | ");
+    return `${i + 1}. ${r.title}\n   path: ${r.path}\n   meta: ${meta}\n   ${tags}`;
+  });
+  return toolText(lines.join("\n\n"));
+}));
+
 server.registerTool("kb_bulk_update", {
   title: "Bulk update note frontmatter",
   description: "Match notes by folder/tag/frontmatter/paths and apply frontmatter ops (addTags, removeTags, setFields, unsetFields, setAccess). Dry-run unless apply=true. Writes a revert bundle when applied.",

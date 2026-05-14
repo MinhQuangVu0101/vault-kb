@@ -181,6 +181,23 @@ export function createWebServer({
             return sendError(res, 500, msg);
           }
         }
+        case "/api/orphans": {
+          const rawLimit = q.get("limit");
+          let limitValue = 50;
+          if (rawLimit != null) {
+            const n = Number(rawLimit);
+            if (!Number.isInteger(n) || n < 1 || n > 200) {
+              return sendError(res, 400, "limit must be an integer between 1 and 200");
+            }
+            limitValue = n;
+          }
+          try {
+            const rows = vaultIndex.findOrphans({ limit: limitValue });
+            return sendJson(res, 200, { rows });
+          } catch (err) {
+            return sendError(res, 500, String(err?.message ?? err));
+          }
+        }
         case "/api/identity": {
           const email = req.headers["cf-access-authenticated-user-email"] ?? null;
           return sendJson(res, 200, { email });

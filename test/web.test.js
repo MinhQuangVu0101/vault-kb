@@ -192,3 +192,40 @@ test("GET /api/suggest-links without path returns 400", async () => {
     await web.stop();
   }
 });
+
+test("GET /api/suggest-links with non-numeric minScore returns 400", async () => {
+  const web = createWebServer({
+    vaultIndex: { readNote: () => ({}), findRelatedByPath: () => [] },
+    embedder: { async summarize() { return null; }, status() { return { llmModel: null }; } },
+    statsSource: () => ({}),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/suggest-links?path=a.md&minScore=abc`);
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.match(json.error.message, /minScore must be a number/);
+  } finally {
+    await web.stop();
+  }
+});
+
+test("GET /api/suggest-links returns 422 when source has no embedding", async () => {
+  const vaultIndex = {
+    readNote: () => ({ path: "a.md", title: "A", rawContent: "x", outlinks: [], backlinks: [], excerpt: "x" }),
+    findRelatedByPath: () => { throw new Error("No embedding for path: a.md"); },
+  };
+  const embedder = { async summarize() { return null; }, status() { return { llmModel: null }; } };
+  const web = createWebServer({ vaultIndex, embedder, statsSource: () => ({}), host: "127.0.0.1", port: 0 });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/suggest-links?path=a.md`);
+    assert.equal(res.status, 422);
+    const json = await res.json();
+    assert.match(json.error.message, /no embedding/i);
+  } finally {
+    await web.stop();
+  }
+});

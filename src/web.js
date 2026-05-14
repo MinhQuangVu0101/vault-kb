@@ -106,18 +106,29 @@ export function createWebServer({
           const p = q.get("path");
           if (!p) return sendError(res, 400, "path required");
           if (!embedder) return sendError(res, 503, "embedder disabled");
+
+          let minScore;
+          const rawMinScore = q.get("minScore");
+          if (rawMinScore != null) {
+            const n = Number(rawMinScore);
+            if (Number.isNaN(n)) return sendError(res, 400, "minScore must be a number");
+            minScore = n;
+          }
+
           try {
             const { suggestLinks } = await import("./suggest-links.js");
             const rows = await suggestLinks({
               vaultIndex,
               embedder,
               path: p,
-              limit: limit,
-              minScore: q.get("minScore") != null ? Number(q.get("minScore")) : undefined,
+              limit,
+              minScore,
             });
             return sendJson(res, 200, { rows });
           } catch (err) {
-            return sendError(res, 500, String(err?.message ?? err));
+            const msg = String(err?.message ?? err);
+            if (/no embedding/i.test(msg)) return sendError(res, 422, msg);
+            return sendError(res, 500, msg);
           }
         }
         default:

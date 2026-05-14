@@ -76,7 +76,7 @@ main { flex: 1; display: grid; grid-template-columns: auto 1fr minmax(240px, 320
 #connections li.error { padding: 4px 0; background: transparent; color: #f87171; }
 
 @media (max-width: 1100px) {
-  main { grid-template-columns: minmax(260px, 340px) 1fr; }
+  main { grid-template-columns: auto 1fr; }
   #connections { display: none; }
 }
 @media (max-width: 600px) {
@@ -129,17 +129,17 @@ main { flex: 1; display: grid; grid-template-columns: auto 1fr minmax(240px, 320
 .hit .meta { color: var(--muted); font-size: 11px; margin-top: 3px; }
 .hit .excerpt { color: var(--muted); font-size: 12px; margin-top: 4px; line-height: 1.4; }
 
-#detail h2 { margin: 10px 0 2px; font-size: 18px; }
-#detail .path { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; margin-bottom: 10px; }
-#detail .links { margin: 14px 0; }
-#detail .links h3 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; }
-#detail .links ul { list-style: none; padding: 0; margin: 0; font-size: 12px; }
-#detail .links li { padding: 3px 0; }
-#detail .links a { color: var(--accent-2); text-decoration: none; cursor: pointer; }
-#detail .links a:hover { text-decoration: underline; }
-#detail .links .unresolved { color: var(--muted); font-style: italic; }
+.pane-detail h2 { margin: 10px 0 2px; font-size: 18px; }
+.pane-detail .path { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; margin-bottom: 10px; }
+.pane-detail .links { margin: 14px 0; }
+.pane-detail .links h3 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; }
+.pane-detail .links ul { list-style: none; padding: 0; margin: 0; font-size: 12px; }
+.pane-detail .links li { padding: 3px 0; }
+.pane-detail .links a { color: var(--accent-2); text-decoration: none; cursor: pointer; }
+.pane-detail .links a:hover { text-decoration: underline; }
+.pane-detail .links .unresolved { color: var(--muted); font-style: italic; }
 
-#detail pre.body {
+.pane-detail pre.body {
   background: var(--panel);
   padding: 12px 14px;
   border-radius: 6px;

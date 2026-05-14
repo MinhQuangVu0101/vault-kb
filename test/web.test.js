@@ -128,3 +128,67 @@ test("GET /api/unknown returns 404", async () => {
     assert.equal(res.status, 404);
   });
 });
+
+test("GET /api/suggest-links returns rows with reasons", async () => {
+  const vaultIndex = {
+    readNote: () => ({
+      path: "a.md", title: "A", rawContent: "body of A",
+      outlinks: [], backlinks: [], excerpt: "body of A",
+    }),
+    findRelatedByPath: () => [{ path: "b.md", title: "B", excerpt: "body of B", score: 0.9 }],
+  };
+  const embedder = {
+    async summarize() { return "they overlap on topic X"; },
+    status() { return { llmModel: "test" }; },
+  };
+  const web = createWebServer({
+    vaultIndex,
+    embedder,
+    statsSource: () => ({}),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  const info = await web.start();
+  const base = `http://${info.host}:${info.port}`;
+  try {
+    const res = await fetch(`${base}/api/suggest-links?path=a.md&limit=3`);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.rows.length, 1);
+    assert.equal(json.rows[0].path, "b.md");
+    assert.equal(json.rows[0].reason, "they overlap on topic X");
+  } finally {
+    await web.stop();
+  }
+});
+
+test("GET /api/suggest-links without embedder returns 503", async () => {
+  const web = createWebServer({
+    vaultIndex: { readNote: () => ({}), findRelatedByPath: () => [] },
+    embedder: null,
+    statsSource: () => ({}),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/suggest-links?path=a.md`);
+    assert.equal(res.status, 503);
+  } finally {
+    await web.stop();
+  }
+});
+
+test("GET /api/suggest-links without path returns 400", async () => {
+  const web = createWebServer({
+    vaultIndex: {}, embedder: {}, statsSource: () => ({}),
+    host: "127.0.0.1", port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/suggest-links`);
+    assert.equal(res.status, 400);
+  } finally {
+    await web.stop();
+  }
+});

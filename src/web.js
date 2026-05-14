@@ -43,6 +43,7 @@ function serveStatic(req, res) {
 
 export function createWebServer({
   vaultIndex,
+  embedder = null,
   statsSource,
   logger,
   port = Number(process.env.VAULT_KB_WEB_PORT) || 7345,
@@ -99,6 +100,24 @@ export function createWebServer({
             return sendJson(res, 200, note);
           } catch (err) {
             return sendError(res, 404, String(err?.message ?? err));
+          }
+        }
+        case "/api/suggest-links": {
+          const p = q.get("path");
+          if (!p) return sendError(res, 400, "path required");
+          if (!embedder) return sendError(res, 503, "embedder disabled");
+          try {
+            const { suggestLinks } = await import("./suggest-links.js");
+            const rows = await suggestLinks({
+              vaultIndex,
+              embedder,
+              path: p,
+              limit: limit,
+              minScore: q.get("minScore") != null ? Number(q.get("minScore")) : undefined,
+            });
+            return sendJson(res, 200, { rows });
+          } catch (err) {
+            return sendError(res, 500, String(err?.message ?? err));
           }
         }
         default:

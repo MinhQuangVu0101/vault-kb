@@ -135,6 +135,7 @@ let web = null;
 if (args.has("--web")) {
   web = createWebServer({
     vaultIndex,
+    embedder,
     logger,
     statsSource: () => ({
       vaultRoot: config.vaultRoot,

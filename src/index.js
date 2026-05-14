@@ -13,6 +13,7 @@ import { runBulkUpdate } from "./bulk.js";
 import { createEmbedder } from "./embeddings.js";
 import { createWebServer } from "./web.js";
 import { suggestLinks } from "./suggest-links.js";
+import { relatedNotes } from "./related.js";
 
 function formatList(rows) {
   if (rows.length === 0) {
@@ -275,6 +276,28 @@ server.registerTool("kb_suggest_links", {
     const reason = r.reason ? `\n   why: ${r.reason}` : "";
     return `${i + 1}. ${r.title}\n   path: ${r.path}\n   score: ${r.score.toFixed(3)}${reason}`;
   });
+  return toolText(lines.join("\n\n"));
+}));
+
+server.registerTool("kb_related", {
+  title: "Related notes",
+  description: "For a given note, return top-N most similar notes regardless of link status. Uses embedding cosine similarity. Lower-friction sibling of kb_suggest_links — no link-graph filtering.",
+  inputSchema: {
+    path: z.string().min(1),
+    limit: z.number().int().min(1).max(20).optional(),
+    minScore: z.number().min(0).max(1).optional(),
+  },
+}, wrapTool("kb_related", async ({ path, limit, minScore }) => {
+  if (!embedder) {
+    return toolText("Embedder disabled (--no-embed). kb_related is unavailable.");
+  }
+  const rows = await relatedNotes({ vaultIndex, path, limit, minScore });
+  if (rows.length === 0) {
+    return toolText("No related notes above threshold.");
+  }
+  const lines = rows.map((r, i) =>
+    `${i + 1}. ${r.title}\n   path: ${r.path}\n   score: ${r.score.toFixed(3)}`
+  );
   return toolText(lines.join("\n\n"));
 }));
 

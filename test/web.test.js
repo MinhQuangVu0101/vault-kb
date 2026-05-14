@@ -394,3 +394,43 @@ test("GET /api/orphans with out-of-range limit returns 400", async () => {
     await web.stop();
   }
 });
+
+test("GET /api/dead-links returns rows", async () => {
+  const vaultIndex = {
+    findDeadLinks: ({ limit }) => [
+      { path: "a.md", title: "Alpha", broken: ["Ghost", "Missing"] },
+    ],
+  };
+  const web = createWebServer({
+    vaultIndex,
+    embedder: null,
+    statsSource: () => ({}),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/dead-links?limit=10`);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.rows.length, 1);
+    assert.equal(json.rows[0].path, "a.md");
+    assert.deepEqual(json.rows[0].broken, ["Ghost", "Missing"]);
+  } finally {
+    await web.stop();
+  }
+});
+
+test("GET /api/dead-links with out-of-range limit returns 400", async () => {
+  const web = createWebServer({
+    vaultIndex: {}, embedder: null, statsSource: () => ({}),
+    host: "127.0.0.1", port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/dead-links?limit=0`);
+    assert.equal(res.status, 400);
+  } finally {
+    await web.stop();
+  }
+});

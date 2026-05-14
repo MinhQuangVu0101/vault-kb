@@ -320,6 +320,24 @@ server.registerTool("kb_orphans", {
   return toolText(lines.join("\n\n"));
 }));
 
+server.registerTool("kb_dead_links", {
+  title: "Find dead links",
+  description: "List every unresolved [[Reference]] in the vault, grouped by source note. Sort: source path ascending.",
+  inputSchema: {
+    limit: z.number().int().min(1).max(200).optional(),
+  },
+}, wrapTool("kb_dead_links", async ({ limit }) => {
+  const rows = vaultIndex.findDeadLinks({ limit: limit ?? 50 });
+  if (rows.length === 0) {
+    return toolText("No dead links found.");
+  }
+  const lines = rows.map((r, i) => {
+    const brokenList = r.broken.map((ref) => `[[${ref}]]`).join(", ");
+    return `${i + 1}. ${r.title}\n   path: ${r.path}\n   broken: ${brokenList}`;
+  });
+  return toolText(lines.join("\n\n"));
+}));
+
 server.registerTool("kb_bulk_update", {
   title: "Bulk update note frontmatter",
   description: "Match notes by folder/tag/frontmatter/paths and apply frontmatter ops (addTags, removeTags, setFields, unsetFields, setAccess). Dry-run unless apply=true. Writes a revert bundle when applied.",

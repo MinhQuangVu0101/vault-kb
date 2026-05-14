@@ -79,6 +79,12 @@ main { flex: 1; display: grid; grid-template-columns: minmax(260px, 340px) 1fr m
   main { grid-template-columns: minmax(260px, 340px) 1fr; }
   #connections { display: none; }
 }
+@media (max-width: 600px) {
+  main { grid-template-columns: 1fr; }
+  body:not(.note-open) #detail { display: none; }
+  body.note-open #results { display: none; }
+  #results, #detail { border-right: none; }
+}
 #results, #detail {
   overflow-y: auto;
   padding: 8px 14px 24px;

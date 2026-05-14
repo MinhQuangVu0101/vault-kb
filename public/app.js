@@ -139,6 +139,7 @@ async function loadIdentity() {
 
 async function openNote(p) {
   activePath = p;
+  document.body.classList.add("note-open");
   for (const el of results.querySelectorAll(".hit")) {
     el.classList.toggle("active", el.querySelector(".path")?.textContent === p);
   }

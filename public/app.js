@@ -65,6 +65,8 @@ function escape(s) {
 async function doSearch() {
   const q = qInput.value.trim();
   if (!q) return;
+  document.body.classList.remove("note-open");
+  activePath = null;
   const mode = modeSelect.value;
   const params = new URLSearchParams({ q });
   if (folderInput.value.trim()) params.set("folder", folderInput.value.trim());
@@ -176,7 +178,15 @@ async function openNote(p) {
     renderBacklinks(note);
     loadSuggestions(p);
   } catch (err) {
-    detail.innerHTML = `<div class="error">${escape(err.message)}</div>`;
+    detail.innerHTML = `
+    <button class="back-to-results" type="button" aria-label="Back to results">←</button>
+    <div class="error">${escape(err.message)}</div>
+  `;
+    detail.querySelector(".back-to-results")?.addEventListener("click", () => {
+      activePath = null;
+      document.body.classList.remove("note-open");
+      for (const el of results.querySelectorAll(".hit")) el.classList.remove("active");
+    });
   }
 }
 

@@ -187,6 +187,8 @@ Set `VAULT_KB_PUBLIC_URL` in your vault-kb startup environment so the boot log s
 export VAULT_KB_PUBLIC_URL=https://vault.<your-domain>
 ```
 
+For troubleshooting tunnel connectivity, DNS routing, or Access policy details, see the [Cloudflare Tunnel docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) and the [Cloudflare Access docs](https://developers.cloudflare.com/cloudflare-one/applications/).
+
 ### Observability
 
 Every tool call is logged as a JSON line to `~/.cache/vault-kb/vault-kb.log` (rotates at 10MB). Failures also show up in `kb_stats.recentErrors` (last 20).

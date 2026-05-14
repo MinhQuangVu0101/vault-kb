@@ -9,6 +9,7 @@ const tagInput = $("tag");
 const goBtn = $("go");
 const backlinksList = $("backlinks-list");
 const suggestList = $("suggest-list");
+const relatedList = $("related-list");
 const identityBadge = $("identity-badge");
 const viewNav = $("view-nav");
 const orphansResults = $("orphans-results");
@@ -141,6 +142,33 @@ async function loadSuggestions(path) {
   } catch (err) {
     if (activePath !== path) return;
     suggestList.innerHTML = `<li class="error">${escape(err.message)}</li>`;
+  }
+}
+
+async function loadRelated(path) {
+  relatedList.innerHTML = '<li class="hint">Loading…</li>';
+  try {
+    const json = await fetchJson(`/api/related?path=${encodeURIComponent(path)}&limit=5`);
+    if (activePath !== path) return;
+    const rows = json.rows ?? [];
+    if (!rows.length) {
+      relatedList.innerHTML = '<li class="hint">No related notes.</li>';
+      return;
+    }
+    relatedList.innerHTML = rows.map((r) => `
+      <li class="suggestion">
+        <div class="title-row">
+          <a data-path="${escape(r.path)}">${escape(r.title)}</a>
+          <span class="badge">${Number(r.score).toFixed(2)}</span>
+        </div>
+      </li>
+    `).join("");
+    relatedList.querySelectorAll("a[data-path]").forEach((a) => {
+      a.addEventListener("click", (e) => { e.preventDefault(); openNote(a.dataset.path); });
+    });
+  } catch (err) {
+    if (activePath !== path) return;
+    relatedList.innerHTML = `<li class="error">${escape(err.message)}</li>`;
   }
 }
 

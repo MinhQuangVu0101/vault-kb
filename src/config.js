@@ -8,11 +8,10 @@ const configSchema = z.object({
   vaultRoot: z.string().min(1).optional(),
   indexPath: z.string().default(".data/vault-index.sqlite"),
   hardExcludedFolders: z.array(z.string()).default([
-    "20 Notes/Personal/Journal",
-    "20 Notes/Personal/Therapy",
     ".obsidian",
     ".obsidian-mobile",
     ".git",
+    ".trash",
   ]),
   defaultLimits: z.object({
     search: z.number().int().positive().default(8),

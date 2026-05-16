@@ -7,6 +7,16 @@ Only notes with `ai-access: true` in frontmatter are indexed — everything else
 [![CI](https://github.com/MinhQuangVu0101/vault-kb/actions/workflows/ci.yml/badge.svg)](https://github.com/MinhQuangVu0101/vault-kb/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+## Screenshots
+
+| Light | Dark |
+|---|---|
+| ![Search view, light theme](docs/screenshots/web-ui-light.png) | ![Search view, dark theme](docs/screenshots/web-ui-dark.png) |
+
+Graph view shows all opt-in notes and their wikilinks:
+
+![Graph view](docs/screenshots/web-ui-graph.png)
+
 ## What it does
 
 - **Search** your vault from any MCP-capable AI client.

@@ -4,7 +4,7 @@
   "description": "Local MCP server that makes opt-in Obsidian notes searchable by AI tools. FTS5 + semantic + link graph, runs entirely on your machine.",
   "type": "module",
   "license": "MIT",
-  "author": "Minh Quang Vu <https://github.com/MinhQuangVu0101>",
+  "author": "Minh Quang Vu <hello@minhquangvu.com> (https://github.com/MinhQuangVu0101)",
   "homepage": "https://github.com/MinhQuangVu0101/vault-kb#readme",
   "repository": {
     "type": "git",

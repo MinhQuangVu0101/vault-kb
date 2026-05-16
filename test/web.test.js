@@ -506,3 +506,42 @@ test("GET /api/graph on empty vault returns empty arrays", async () => {
     index.close();
   }
 });
+
+test("getGraphData() caches across calls and invalidates on mutation", () => {
+  const v = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-graph-cache-"));
+  write(v, "a.md", { "ai-access": true }, "a body");
+  const index = new VaultIndex(mkConfig(v));
+  index.ingest();
+  const first = index.getGraphData();
+  const second = index.getGraphData();
+  assert.strictEqual(first, second, "cache returns same object reference");
+  write(v, "b.md", { "ai-access": true }, "b body");
+  index.ingestOne("b.md");
+  const third = index.getGraphData();
+  assert.notStrictEqual(first, third, "cache invalidated after ingestOne");
+  assert.equal(third.nodes.length, first.nodes.length + 1);
+  index.close();
+});
+
+test("pruneOrphanEmbeddings removes embeddings whose note is gone", () => {
+  const v = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-prune-"));
+  write(v, "alive.md", { "ai-access": true }, "alive body");
+  write(v, "dies.md", { "ai-access": true }, "dies body");
+  const config = mkConfig(v);
+  const index = new VaultIndex(config);
+  index.ingest();
+  // Manually insert a fake embedding for both
+  for (const p of ["alive.md", "dies.md"]) {
+    index.db.prepare(
+      "INSERT INTO embeddings (path, model, content_hash, vector, embedded_at) VALUES (?, ?, ?, ?, ?)",
+    ).run(p, "test-model", "hash", Buffer.alloc(8), new Date().toISOString());
+  }
+  assert.equal(index.db.prepare("SELECT COUNT(*) as c FROM embeddings").get().c, 2);
+  // Remove the note from disk, re-ingest
+  fs.unlinkSync(path.join(v, "dies.md"));
+  const report = index.ingest();
+  assert.equal(report.prunedEmbeddings, 1, "one orphan embedding pruned");
+  assert.equal(index.db.prepare("SELECT COUNT(*) as c FROM embeddings WHERE path = ?").get("dies.md").c, 0);
+  assert.equal(index.db.prepare("SELECT COUNT(*) as c FROM embeddings WHERE path = ?").get("alive.md").c, 1);
+  index.close();
+});

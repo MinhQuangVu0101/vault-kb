@@ -99,6 +99,7 @@ export class VaultIndex {
     this.logger = logger;
     this.stats = stats;
     this.embedder = embedder;
+    this.graphCache = null;
     ensureDirForFile(config.indexPath);
     this.db = new Database(config.indexPath);
     this.db.pragma("journal_mode = WAL");
@@ -230,6 +231,12 @@ export class VaultIndex {
         embedded_at = excluded.embedded_at
     `);
     this.deleteEmbeddingStmt = this.db.prepare("DELETE FROM embeddings WHERE path = ?");
+    this.findOrphanEmbeddingsStmt = this.db.prepare(`
+      SELECT embeddings.path AS path
+      FROM embeddings
+      LEFT JOIN notes ON notes.path = embeddings.path
+      WHERE notes.path IS NULL
+    `);
     this.countEmbeddingsStmt = this.db.prepare("SELECT COUNT(*) AS c FROM embeddings");
     this.listEmbeddingsStmt = this.db.prepare("SELECT path, vector FROM embeddings");
     this.findRelatedRowsStmt = this.db.prepare(`
@@ -353,8 +360,10 @@ export class VaultIndex {
       skippedWithoutAccess: skipped.missingAccess + skipped.explicitFalse,
       hardExcludedFolders: this.config.hardExcludedFolders,
       indexedAt: this.getLastIngestedAt(),
+      prunedEmbeddings: this.pruneOrphanEmbeddings(),
     };
     this.rebuildAllLinks();
+    this.graphCache = null;
     this.stats?.recordIngest(report);
     return report;
   }
@@ -395,6 +404,7 @@ export class VaultIndex {
     tx(note);
     this.rebuildLinksForSource(relativePath, note.body);
 
+    this.graphCache = null;
     return { path: relativePath, action: "upserted" };
   }
 
@@ -407,6 +417,7 @@ export class VaultIndex {
       this.deleteLinksForSourceStmt.run(p);
     });
     tx(relativePath);
+    this.graphCache = null;
     return { path: relativePath, action: "removed" };
   }
 
@@ -465,6 +476,16 @@ export class VaultIndex {
     const map = new Map();
     for (const { path: p, c } of this.backlinkCountStmt.all()) map.set(p, c);
     return map;
+  }
+
+  pruneOrphanEmbeddings() {
+    const orphans = this.findOrphanEmbeddingsStmt.all().map((r) => r.path);
+    if (orphans.length === 0) return 0;
+    const tx = this.db.transaction(() => {
+      for (const p of orphans) this.deleteEmbeddingStmt.run(p);
+    });
+    tx();
+    return orphans.length;
   }
 
   async embedIfStale(relativePath, { title, body }) {
@@ -632,6 +653,8 @@ export class VaultIndex {
   }
 
   getGraphData() {
+    if (this.graphCache) return this.graphCache;
+
     const noteRows = this.db.prepare(`
       SELECT path, title, folder, tags_text
       FROM notes
@@ -661,7 +684,8 @@ export class VaultIndex {
       target: row.target,
     }));
 
-    return { nodes, links };
+    this.graphCache = { nodes, links };
+    return this.graphCache;
   }
 
   ensureIndexed() {

@@ -1,6 +1,6 @@
 # Vault-KB Web UI — Redesign (Phase 3.1)
 
-**Status:** Draft
+**Status:** Shipped (v0.2.0)
 **Date:** 2026-05-16
 **Owner:** Minh Quang Vu
 

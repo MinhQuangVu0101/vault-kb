@@ -215,6 +215,13 @@ export function createWebServer({
             return sendError(res, 500, String(err?.message ?? err));
           }
         }
+        case "/api/graph": {
+          try {
+            return sendJson(res, 200, vaultIndex.getGraphData());
+          } catch (err) {
+            return sendError(res, 500, String(err?.message ?? err));
+          }
+        }
         case "/api/identity": {
           const email = req.headers["cf-access-authenticated-user-email"] ?? null;
           return sendJson(res, 200, { email });

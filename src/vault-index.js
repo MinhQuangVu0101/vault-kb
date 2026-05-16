@@ -631,6 +631,39 @@ export class VaultIndex {
       .slice(0, limit);
   }
 
+  getGraphData() {
+    const noteRows = this.db.prepare(`
+      SELECT path, title, folder, tags_text
+      FROM notes
+      ORDER BY path
+    `).all();
+
+    const linkRows = this.db.prepare(`
+      SELECT source, target
+      FROM links
+      WHERE unresolved = 0
+      ORDER BY source, target
+    `).all();
+
+    const counts = this.backlinkCounts();
+    const nodes = noteRows.map((row) => ({
+      id: row.path,
+      title: row.title ?? row.path,
+      folder: row.folder ?? "",
+      backlinkCount: counts.get(row.path) ?? 0,
+      tags: row.tags_text
+        ? row.tags_text.split(/,\s*/).filter(Boolean)
+        : [],
+    }));
+
+    const links = linkRows.map((row) => ({
+      source: row.source,
+      target: row.target,
+    }));
+
+    return { nodes, links };
+  }
+
   ensureIndexed() {
     if (!this.getLastIngestedAt()) {
       return this.ingest();

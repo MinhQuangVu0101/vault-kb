@@ -1,9 +1,41 @@
 {
   "name": "vault-kb",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Local MCP server for AI-accessible Obsidian notes: search, read, list, ingest, bulk edit.",
+  "version": "0.2.0",
+  "description": "Local MCP server that makes opt-in Obsidian notes searchable by AI tools. FTS5 + semantic + link graph, runs entirely on your machine.",
   "type": "module",
+  "license": "MIT",
+  "author": "Minh Quang Vu <hello@minhquangvu.com> (https://github.com/MinhQuangVu0101)",
+  "homepage": "https://github.com/MinhQuangVu0101/vault-kb#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MinhQuangVu0101/vault-kb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MinhQuangVu0101/vault-kb/issues"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "obsidian",
+    "knowledge-base",
+    "claude",
+    "claude-code",
+    "claude-desktop",
+    "ollama",
+    "rag",
+    "semantic-search",
+    "fts5"
+  ],
+  "bin": {
+    "vault-kb": "src/index.js"
+  },
+  "main": "src/index.js",
+  "files": [
+    "src/",
+    "public/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node src/index.js",
     "ingest": "node src/index.js --ingest-only",
@@ -11,7 +43,8 @@
     "smoke": "node src/smoke-test.js",
     "test": "node --test 'test/*.test.js'",
     "regression": "node scripts/regression-harness.js",
-    "bulk": "node scripts/bulk.js"
+    "bulk": "node scripts/bulk.js",
+    "prepublishOnly": "npm test"
   },
   "engines": {
     "node": ">=20"

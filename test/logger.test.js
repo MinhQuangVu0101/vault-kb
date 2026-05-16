@@ -35,8 +35,16 @@ test("logger rotates at maxBytes threshold", () => {
   assert.ok(fs.existsSync(logPath), "current log should exist");
 });
 
-test("logger never throws when directory is read-only", () => {
-  const log = createLogger({ logPath: "/proc/readonly/vault-kb.log" });
+test("logger never throws when directory cannot be created", () => {
+  // Use a path whose parent is a regular file, not a directory.
+  // mkdirSync under a file fails on every platform with ENOTDIR/EEXIST,
+  // which the logger catches and sets disabled = true.
+  const blockerDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-log-blocker-"));
+  const blockerFile = path.join(blockerDir, "not-a-dir");
+  fs.writeFileSync(blockerFile, "this is a file, not a directory");
+  const logPath = path.join(blockerFile, "subdir", "vault-kb.log");
+
+  const log = createLogger({ logPath });
   assert.doesNotThrow(() => log.info({ event: "unreachable" }));
   assert.doesNotThrow(() => log.error({ event: "still-fine" }));
   assert.equal(log.disabled, true);

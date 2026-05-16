@@ -93,10 +93,14 @@ async function fetchJson(url) {
 async function loadStats() {
   try {
     const s = await fetchJson("/api/stats");
+    const indexed = s.indexed ?? 0;
+    const scanned = s.scannedMarkdownFiles ?? indexed;
+    const embedCovered = Math.min(s.embeddings.covered ?? 0, indexed);
+    const watcherOn = s.watcher?.active;
     const pills = [
-      `<span class="pill"><span class="dot"></span>${s.indexed} notes</span>`,
-      `<span class="pill">${s.embeddings.covered}/${s.embeddings.total} embeddings</span>`,
-      `<span class="pill ${s.watcher?.active ? "" : "warn"}"><span class="dot"></span>watcher ${s.watcher?.active ? "on" : "off"}</span>`,
+      `<span class="pill" title="${indexed} notes opted-in with ai-access: true (out of ${scanned} markdown files scanned)"><span class="dot"></span>${indexed.toLocaleString()} / ${scanned.toLocaleString()} ai-access</span>`,
+      `<span class="pill" title="${embedCovered} of ${indexed} indexed notes have semantic embeddings"><span class="dot"></span>${embedCovered.toLocaleString()} / ${indexed.toLocaleString()} embedded</span>`,
+      `<span class="pill ${watcherOn ? "" : "warn"}" title="${watcherOn ? "Auto-reindex on file change" : "Auto-reindex disabled (started with --no-watcher)"}"><span class="dot"></span>watcher ${watcherOn ? "on" : "off"}</span>`,
     ];
     if (s.embeddings.reachable === false) {
       pills.push(`<span class="pill warn"><span class="dot"></span>ollama unreachable</span>`);

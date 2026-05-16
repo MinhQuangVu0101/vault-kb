@@ -167,6 +167,8 @@ if (args.has("--web")) {
         ...(embedder ? embedder.status() : { model: null, llmModel: null, reachable: null, lastError: null }),
       },
       ...stats.snapshot(),
+      topFolders: vaultIndex.getTopFolders(),
+      topTags: vaultIndex.getTopTags(),
     }),
   });
   const info = await web.start();

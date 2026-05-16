@@ -523,6 +523,43 @@ test("getGraphData() caches across calls and invalidates on mutation", () => {
   index.close();
 });
 
+test("GET /api/stats includes topFolders and topTags", async () => {
+  const v = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-stats-top-"));
+  write(v, "projects/a.md", { "ai-access": true, tags: ["alpha", "shared"] }, "a");
+  write(v, "projects/b.md", { "ai-access": true, tags: ["beta", "shared"] }, "b");
+  write(v, "reference/c.md", { "ai-access": true, tags: ["gamma"] }, "c");
+  const config = mkConfig(v);
+  const index = new VaultIndex(config);
+  index.ingest();
+  const web = createWebServer({
+    vaultIndex: index,
+    statsSource: () => ({
+      indexed: 3,
+      scannedMarkdownFiles: 3,
+      watcher: { active: false, events: null },
+      embeddings: { covered: 0, total: 3, reachable: null, model: null, lastError: null },
+      lastIngest: new Date().toISOString(),
+      topFolders: index.getTopFolders(),
+      topTags: index.getTopTags(),
+    }),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  const info = await web.start();
+  try {
+    const res = await fetch(`http://${info.host}:${info.port}/api/stats`);
+    const json = await res.json();
+    assert.ok(Array.isArray(json.topFolders));
+    assert.deepEqual(json.topFolders[0], { folder: "projects", count: 2 });
+    assert.ok(Array.isArray(json.topTags));
+    const sharedTag = json.topTags.find((t) => t.tag === "shared");
+    assert.equal(sharedTag.count, 2);
+  } finally {
+    await web.stop();
+    index.close();
+  }
+});
+
 test("pruneOrphanEmbeddings removes embeddings whose note is gone", () => {
   const v = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-prune-"));
   write(v, "alive.md", { "ai-access": true }, "alive body");

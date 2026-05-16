@@ -46,9 +46,15 @@ function toggleTheme() {
   const next = document.documentElement.classList.contains("theme-dark") ? "light" : "dark";
   applyTheme(next);
   try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
-  // Refresh graph palette to match new theme on next Graph visit
+  // Rebuild graph with the new palette. If the Graph tab is currently
+  // visible, re-render immediately; otherwise just reset state so the
+  // next visit picks up the new colors.
   graphLoaded = false;
   graphInstance = null;
+  if (activeView === "graph" && graphCanvas) {
+    graphCanvas.innerHTML = '<div class="graph-empty">Loading…</div>';
+    loadGraph();
+  }
 }
 themeToggle?.addEventListener("click", toggleTheme);
 initTheme();
@@ -98,8 +104,8 @@ async function loadStats() {
     const embedCovered = Math.min(s.embeddings.covered ?? 0, indexed);
     const watcherOn = s.watcher?.active;
     const pills = [
-      `<span class="pill" title="${indexed} notes opted-in with ai-access: true (out of ${scanned} markdown files scanned)"><span class="dot"></span>${indexed.toLocaleString()} / ${scanned.toLocaleString()} ai-access</span>`,
-      `<span class="pill" title="${embedCovered} of ${indexed} indexed notes have semantic embeddings"><span class="dot"></span>${embedCovered.toLocaleString()} / ${indexed.toLocaleString()} embedded</span>`,
+      `<span class="pill" title="${indexed} notes opted-in with ai-access: true (out of ${scanned} markdown files scanned)"><span class="dot"></span>${indexed.toLocaleString("en-US")} / ${scanned.toLocaleString("en-US")} ai-access</span>`,
+      `<span class="pill" title="${embedCovered} of ${indexed} indexed notes have semantic embeddings"><span class="dot"></span>${embedCovered.toLocaleString("en-US")} / ${indexed.toLocaleString("en-US")} embedded</span>`,
       `<span class="pill ${watcherOn ? "" : "warn"}" title="${watcherOn ? "Auto-reindex on file change" : "Auto-reindex disabled (started with --no-watcher)"}"><span class="dot"></span>watcher ${watcherOn ? "on" : "off"}</span>`,
     ];
     if (s.embeddings.reachable === false) {

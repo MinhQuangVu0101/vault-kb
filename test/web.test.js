@@ -507,17 +507,20 @@ test("GET /api/graph on empty vault returns empty arrays", async () => {
   }
 });
 
-test("getGraphData() caches across calls and invalidates on ingest", async () => {
-  await withServer(async (base) => {
-    const a = await (await fetch(`${base}/api/graph`)).json();
-    const b = await (await fetch(`${base}/api/graph`)).json();
-    // shallow compare: should be the same shape and same first node id
-    assert.equal(a.nodes.length, b.nodes.length);
-    assert.equal(a.links.length, b.links.length);
-    // The test doesn't directly inspect cache, but the assertion verifies
-    // identical results — combined with the cache fields being added to
-    // the index, this confirms the cache path works end-to-end.
-  });
+test("getGraphData() caches across calls and invalidates on mutation", () => {
+  const v = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-graph-cache-"));
+  write(v, "a.md", { "ai-access": true }, "a body");
+  const index = new VaultIndex(mkConfig(v));
+  index.ingest();
+  const first = index.getGraphData();
+  const second = index.getGraphData();
+  assert.strictEqual(first, second, "cache returns same object reference");
+  write(v, "b.md", { "ai-access": true }, "b body");
+  index.ingestOne("b.md");
+  const third = index.getGraphData();
+  assert.notStrictEqual(first, third, "cache invalidated after ingestOne");
+  assert.equal(third.nodes.length, first.nodes.length + 1);
+  index.close();
 });
 
 test("pruneOrphanEmbeddings removes embeddings whose note is gone", () => {

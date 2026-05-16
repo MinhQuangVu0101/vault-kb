@@ -352,6 +352,7 @@ export class VaultIndex {
 
     writeAll(notes);
 
+    const prunedEmbeddings = this.pruneOrphanEmbeddings();
     const report = {
       vaultRoot: this.config.vaultRoot,
       scannedMarkdownFiles: files.length,
@@ -360,7 +361,7 @@ export class VaultIndex {
       skippedWithoutAccess: skipped.missingAccess + skipped.explicitFalse,
       hardExcludedFolders: this.config.hardExcludedFolders,
       indexedAt: this.getLastIngestedAt(),
-      prunedEmbeddings: this.pruneOrphanEmbeddings(),
+      prunedEmbeddings,
     };
     this.rebuildAllLinks();
     this.graphCache = null;

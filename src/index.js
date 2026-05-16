@@ -239,6 +239,7 @@ server.registerTool("kb_ingest", {
     `scannedMarkdownFiles: ${report.scannedMarkdownFiles}`,
     `indexedNotes: ${report.indexedNotes}`,
     `skipped: missingAccess=${report.skipped.missingAccess}, explicitFalse=${report.skipped.explicitFalse}, hardExcluded=${report.skipped.hardExcluded}, parseError=${report.skipped.parseError}`,
+    `prunedEmbeddings: ${report.prunedEmbeddings ?? 0}`,
     `indexedAt: ${report.indexedAt}`,
   ].join("\n"));
 }));

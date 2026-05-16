@@ -347,3 +347,54 @@ for (const btn of viewNav.querySelectorAll(".view-tab")) {
 loadStats();
 setInterval(loadStats, 5000);
 loadIdentity();
+
+/* GRAPH */
+let graphInstance = null;
+let graphLoaded = false;
+
+const FOLDER_COLORS = {
+  "00": "#c4b5fd", "01": "#fdba74", "02": "#fcd34d", "03": "#f9a8d4",
+  "10": "#fde047", "20": "#7dd3fc", "30": "#fca5a5", "40": "#6ee7b7",
+  "50": "#67e8f9", "60": "#f0abfc", "70": "#d6d3d1", "80": "#cbd5e1",
+  "90": "#d8b4fe", "95": "#c4b5fd",
+};
+
+function folderColor(folder) {
+  const m = /^(\d\d)\s/.exec(folder || "");
+  if (m && FOLDER_COLORS[m[1]]) return FOLDER_COLORS[m[1]];
+  return getComputedStyle(document.documentElement).getPropertyValue("--text-3").trim() || "#9aa3b2";
+}
+
+async function loadGraph() {
+  if (graphLoaded) return;
+  if (typeof ForceGraph !== "function") {
+    graphCanvas.innerHTML = '<div class="graph-empty">force-graph library missing.</div>';
+    return;
+  }
+  graphCanvas.innerHTML = '<div class="graph-empty">Loading graph…</div>';
+  try {
+    const data = await fetchJson("/api/graph");
+    if (!data.nodes.length) {
+      graphCanvas.innerHTML = '<div class="graph-empty">No notes indexed yet.</div>';
+      return;
+    }
+    graphCanvas.innerHTML = "";
+    graphInstance = ForceGraph()(graphCanvas)
+      .graphData(data)
+      .nodeId("id")
+      .nodeLabel((n) => n.title)
+      .nodeVal((n) => 1 + (n.backlinkCount ?? 0) * 0.6)
+      .nodeColor((n) => folderColor(n.folder))
+      .linkColor(() => getComputedStyle(document.documentElement).getPropertyValue("--border-2").trim() || "#a8a29e")
+      .linkDirectionalParticles(0)
+      .backgroundColor(getComputedStyle(document.documentElement).getPropertyValue("--bg-1").trim() || "#fafaf9")
+      .onNodeClick((node) => {
+        switchView("search");
+        openNote(node.id);
+      });
+    graphLoaded = true;
+    window.addEventListener("resize", () => graphInstance?.width(graphCanvas.clientWidth).height(graphCanvas.clientHeight));
+  } catch (err) {
+    graphCanvas.innerHTML = `<div class="error">Graph load failed: ${escape(err.message)}</div>`;
+  }
+}

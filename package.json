@@ -40,7 +40,7 @@
     "start": "node src/index.js",
     "ingest": "node src/index.js --ingest-only",
     "inspect-config": "node src/index.js --print-config",
-    "smoke": "node src/smoke-test.js",
+    "smoke": "node src/smoke.js",
     "test": "node --test",
     "regression": "node scripts/regression-harness.js",
     "bulk": "node scripts/bulk.js",

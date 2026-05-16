@@ -34,6 +34,7 @@
     "src/",
     "public/",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {

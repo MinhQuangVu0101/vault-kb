@@ -173,14 +173,14 @@ npm run ingest          # Build/rebuild the index
 npm run inspect-config  # Print resolved config
 npm run smoke           # Spawn the server and call a few tools
 npm test                # Unit tests (no vault needed — tests build tmp vaults)
-npm run regression      # Read every indexed note and report failures
-npm run bulk -- --help  # Bulk frontmatter edits
 npm start               # Start the MCP server (stdio)
 npm start -- --no-embed         # Skip embeddings
 npm start -- --no-llm-summary   # Score-only link suggestions
 npm start -- --no-watcher       # Skip file watcher
 npm start -- --web              # Also serve the local web UI
 ```
+
+Source-only helpers (clone the repo to use): `scripts/bulk.js` for bulk frontmatter edits with `--help`, and `scripts/regression-harness.js` for reading every indexed note and reporting failures.
 
 ## Optional: remote dashboard via Cloudflare Tunnel
 

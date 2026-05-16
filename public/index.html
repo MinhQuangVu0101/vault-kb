@@ -8,14 +8,22 @@
 </head>
 <body>
   <header>
-    <h1>vault-kb</h1>
-    <div id="stats-bar" class="stats">loading…</div>
-    <div id="identity-badge" class="identity-badge hidden"></div>
+    <div class="brand-block">
+      <div class="logo">kb</div>
+      <span class="brand">vault-kb</span>
+      <div id="stat-pills" class="stat-pills"></div>
+    </div>
+    <div class="header-right">
+      <span id="last-sync" class="last-sync"></span>
+      <div id="identity-badge" class="identity-badge hidden"></div>
+      <button id="theme-toggle" class="theme-toggle" type="button" title="Toggle theme">🌙</button>
+    </div>
   </header>
 
   <main>
     <nav id="view-nav" aria-label="Views">
       <button class="view-tab active" data-view="search" type="button">Search</button>
+      <button class="view-tab" data-view="graph" type="button">Graph</button>
       <button class="view-tab" data-view="orphans" type="button">Orphans</button>
       <button class="view-tab" data-view="dead-links" type="button">Dead Links</button>
     </nav>
@@ -23,23 +31,28 @@
     <section id="content-pane">
       <section id="view-search" class="view">
         <section class="search">
-          <div class="row">
-            <input id="q" type="search" placeholder="Search…" autofocus>
-            <select id="mode">
-              <option value="search">keyword</option>
-              <option value="semantic">semantic</option>
-            </select>
-            <button id="go">Search</button>
+          <div class="search-row">
+            <input id="q" class="search-input" type="search" placeholder="Search vault…" autofocus>
+            <div id="mode-switch" class="mode-switch">
+              <button type="button" class="on" data-mode="search">keyword</button>
+              <button type="button" data-mode="semantic">semantic</button>
+            </div>
           </div>
-          <div class="row small">
-            <input id="folder" placeholder="folder filter (optional)">
-            <input id="tag" placeholder="tag filter (optional)">
+          <div class="filter-row">
+            <button class="chip on" id="chip-all" type="button" data-clear>all folders</button>
+            <label class="chip"><input type="text" id="folder" placeholder="folder…"></label>
+            <label class="chip"><input type="text" id="tag" placeholder="tag…"></label>
           </div>
         </section>
         <div class="two-pane">
           <aside id="results" class="pane-list" aria-label="Results"></aside>
           <article id="detail" class="pane-detail" aria-label="Note detail"><p class="hint">Pick a result to see details.</p></article>
         </div>
+      </section>
+
+      <section id="view-graph" class="view hidden">
+        <div class="view-header"><h2>Graph</h2><p class="hint">All AI-accessible notes and their wikilinks.</p></div>
+        <div id="graph-canvas"><div class="graph-empty">Loading…</div></div>
       </section>
 
       <section id="view-orphans" class="view hidden">

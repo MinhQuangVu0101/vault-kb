@@ -29,6 +29,7 @@ const THEME_KEY = "vault-kb-theme";
 function applyTheme(theme) {
   document.documentElement.classList.toggle("theme-dark", theme === "dark");
   document.documentElement.classList.toggle("theme-light", theme !== "dark");
+  if (!themeToggle) return;
   themeToggle.textContent = theme === "dark" ? "☀" : "🌙";
   themeToggle.title = `Switch to ${theme === "dark" ? "light" : "dark"}`;
 }
@@ -98,6 +99,7 @@ async function loadStats() {
     statPills.innerHTML = pills.join("");
     lastSync.textContent = s.lastIngest ? `last sync · ${new Date(s.lastIngest).toLocaleTimeString()}` : "";
   } catch (err) {
+    console.warn("loadStats failed:", err);
     statPills.innerHTML = `<span class="pill warn">stats error</span>`;
     lastSync.textContent = "";
   }

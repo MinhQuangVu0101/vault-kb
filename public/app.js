@@ -104,8 +104,8 @@ async function loadStats() {
     const embedCovered = Math.min(s.embeddings.covered ?? 0, indexed);
     const watcherOn = s.watcher?.active;
     const pills = [
-      `<span class="pill" title="${indexed} notes opted-in with ai-access: true (out of ${scanned} markdown files scanned)"><span class="dot"></span>${indexed.toLocaleString("en-US")} / ${scanned.toLocaleString("en-US")} ai-access</span>`,
-      `<span class="pill" title="${embedCovered} of ${indexed} indexed notes have semantic embeddings"><span class="dot"></span>${embedCovered.toLocaleString("en-US")} / ${indexed.toLocaleString("en-US")} embedded</span>`,
+      `<span class="pill" title="${indexed} notes opted-in with ai-access: true (out of ${scanned} markdown files scanned)"><span class="dot"></span>${indexed} / ${scanned} ai-access</span>`,
+      `<span class="pill" title="${embedCovered} of ${indexed} indexed notes have semantic embeddings"><span class="dot"></span>${embedCovered} / ${indexed} embedded</span>`,
       `<span class="pill ${watcherOn ? "" : "warn"}" title="${watcherOn ? "Auto-reindex on file change" : "Auto-reindex disabled (started with --no-watcher)"}"><span class="dot"></span>watcher ${watcherOn ? "on" : "off"}</span>`,
     ];
     if (s.embeddings.reachable === false) {

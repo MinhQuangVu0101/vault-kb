@@ -9,13 +9,12 @@ Only notes with `ai-access: true` in frontmatter are indexed — everything else
 
 ## Screenshots
 
+Captured against the bundled demo vault (`test/fixture/demo-vault/`) — 8 notes across 4 folders so the link graph, folder-rainbow colors, and theme switch are all visible.
+
 | Light | Dark |
 |---|---|
 | ![Search view, light theme](docs/screenshots/web-ui-light.png) | ![Search view, dark theme](docs/screenshots/web-ui-dark.png) |
-
-Graph view shows all opt-in notes and their wikilinks:
-
-![Graph view](docs/screenshots/web-ui-graph.png)
+| ![Graph view, light theme](docs/screenshots/web-ui-graph-light.png) | ![Graph view, dark theme](docs/screenshots/web-ui-graph-dark.png) |
 
 ## What it does
 

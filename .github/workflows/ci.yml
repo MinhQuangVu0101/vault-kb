@@ -20,3 +20,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npm run smoke
+        env:
+          VAULT_KB_VAULT_PATH: ${{ github.workspace }}/test/fixture/demo-vault

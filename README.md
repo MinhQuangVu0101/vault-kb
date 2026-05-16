@@ -32,6 +32,7 @@ Graph view shows all opt-in notes and their wikilinks:
 - Folders in `hardExcludedFolders` are never touched (defaults: `.obsidian`, `.obsidian-mobile`, `.git`, `.trash`).
 - The MCP server is read-mostly: write tools (`kb_bulk_update`) require explicit `apply: true` and always produce a revert bundle.
 - The SQLite index is local — no network calls except optional Ollama on `127.0.0.1`.
+- The web UI loads Inter Variable from Google Fonts (cached after first load). Replace the `@import` in `public/style.css` to use a system font or self-host if you'd rather not.
 
 ## Install
 

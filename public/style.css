@@ -234,10 +234,11 @@ main {
 }
 .hit:hover { background: var(--bg-2); border-color: var(--border-1); }
 .hit.active { background: var(--accent-subtle); border-color: var(--accent); }
-.hit-title { font-weight: 600; font-size: 13px; letter-spacing: -0.005em; margin-bottom: 3px; }
-.hit-meta { font-size: 11px; color: var(--text-3); display: flex; gap: 6px; flex-wrap: wrap; }
-.hit-meta .sep { opacity: 0.5; }
-.hit-excerpt { font-size: 11.5px; color: var(--text-3); margin-top: 5px; line-height: 1.5; }
+.hit .title { font-weight: 600; font-size: 13px; letter-spacing: -0.005em; margin-bottom: 3px; }
+.hit .path { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); margin-bottom: 3px; }
+.hit .meta { font-size: 11px; color: var(--text-3); display: flex; gap: 6px; flex-wrap: wrap; }
+.hit .meta .sep { opacity: 0.5; }
+.hit .excerpt { font-size: 11.5px; color: var(--text-3); margin-top: 5px; line-height: 1.5; }
 
 .pane-detail h2 { margin: 10px 0 4px; font-size: 18px; font-weight: 700; letter-spacing: -0.015em; }
 .pane-detail .path { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); margin-bottom: var(--sp-4); }

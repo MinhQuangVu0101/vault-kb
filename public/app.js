@@ -23,6 +23,8 @@ const graphCanvas = $("graph-canvas");
 let activePath = null;
 let activeView = "search";
 let searchMode = "search"; // "search" or "semantic"
+let graphInstance = null;
+let graphLoaded = false;
 
 /* THEME */
 const THEME_KEY = "vault-kb-theme";
@@ -44,6 +46,9 @@ function toggleTheme() {
   const next = document.documentElement.classList.contains("theme-dark") ? "light" : "dark";
   applyTheme(next);
   try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
+  // Refresh graph palette to match new theme on next Graph visit
+  graphLoaded = false;
+  graphInstance = null;
 }
 themeToggle?.addEventListener("click", toggleTheme);
 initTheme();
@@ -349,9 +354,6 @@ setInterval(loadStats, 5000);
 loadIdentity();
 
 /* GRAPH */
-let graphInstance = null;
-let graphLoaded = false;
-
 const FOLDER_COLORS = {
   "00": "#c4b5fd", "01": "#fdba74", "02": "#fcd34d", "03": "#f9a8d4",
   "10": "#fde047", "20": "#7dd3fc", "30": "#fca5a5", "40": "#6ee7b7",

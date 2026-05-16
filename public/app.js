@@ -1,27 +1,70 @@
 const $ = (id) => document.getElementById(id);
 const results = $("results");
 const detail = $("detail");
-const statsBar = $("stats-bar");
+const statPills = $("stat-pills");
+const lastSync = $("last-sync");
 const qInput = $("q");
-const modeSelect = $("mode");
+const modeSwitch = $("mode-switch");
 const folderInput = $("folder");
 const tagInput = $("tag");
-const goBtn = $("go");
+const chipAll = $("chip-all");
 const backlinksList = $("backlinks-list");
 const suggestList = $("suggest-list");
 const relatedList = $("related-list");
 const identityBadge = $("identity-badge");
 const viewNav = $("view-nav");
+const themeToggle = $("theme-toggle");
 const orphansResults = $("orphans-results");
 const orphansDetail = $("orphans-detail");
 const deadLinksResults = $("dead-links-results");
 const deadLinksDetail = $("dead-links-detail");
+const graphCanvas = $("graph-canvas");
 
 let activePath = null;
 let activeView = "search";
+let searchMode = "search"; // "search" or "semantic"
+
+/* THEME */
+const THEME_KEY = "vault-kb-theme";
+function applyTheme(theme) {
+  document.documentElement.classList.toggle("theme-dark", theme === "dark");
+  document.documentElement.classList.toggle("theme-light", theme !== "dark");
+  themeToggle.textContent = theme === "dark" ? "☀" : "🌙";
+  themeToggle.title = `Switch to ${theme === "dark" ? "light" : "dark"}`;
+}
+function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem(THEME_KEY); } catch (_) { /* private mode */ }
+  const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+  const theme = saved ?? (prefersDark ? "dark" : "light");
+  applyTheme(theme);
+}
+function toggleTheme() {
+  const next = document.documentElement.classList.contains("theme-dark") ? "light" : "dark";
+  applyTheme(next);
+  try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
+}
+themeToggle?.addEventListener("click", toggleTheme);
+initTheme();
+
+/* MODE SWITCH */
+modeSwitch?.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-mode]");
+  if (!btn) return;
+  searchMode = btn.dataset.mode;
+  for (const b of modeSwitch.querySelectorAll("button")) {
+    b.classList.toggle("on", b === btn);
+  }
+});
+
+/* CLEAR-FILTER CHIP */
+chipAll?.addEventListener("click", () => {
+  folderInput.value = "";
+  tagInput.value = "";
+});
 
 function switchView(name) {
-  if (!["search", "orphans", "dead-links"].includes(name)) return;
+  if (!["search", "graph", "orphans", "dead-links"].includes(name)) return;
   activeView = name;
   for (const btn of viewNav.querySelectorAll(".view-tab")) {
     btn.classList.toggle("active", btn.dataset.view === name);
@@ -31,6 +74,7 @@ function switchView(name) {
   }
   if (name === "orphans") loadOrphans();
   else if (name === "dead-links") loadDeadLinks();
+  else if (name === "graph") loadGraph();
 }
 
 async function fetchJson(url) {
@@ -43,16 +87,19 @@ async function fetchJson(url) {
 async function loadStats() {
   try {
     const s = await fetchJson("/api/stats");
-    const parts = [
-      `indexed: ${s.indexed}`,
-      `embeddings: ${s.embeddings.covered}/${s.embeddings.total}`,
-      `watcher: ${s.watcher?.active ? "on" : "off"}`,
-      `lastIngest: ${s.lastIngest ? new Date(s.lastIngest).toLocaleTimeString() : "-"}`,
+    const pills = [
+      `<span class="pill"><span class="dot"></span>${s.indexed} notes</span>`,
+      `<span class="pill">${s.embeddings.covered}/${s.embeddings.total} embeddings</span>`,
+      `<span class="pill ${s.watcher?.active ? "" : "warn"}"><span class="dot"></span>watcher ${s.watcher?.active ? "on" : "off"}</span>`,
     ];
-    if (s.embeddings.reachable === false) parts.push("ollama: unreachable");
-    statsBar.textContent = parts.join(" · ");
+    if (s.embeddings.reachable === false) {
+      pills.push(`<span class="pill warn"><span class="dot"></span>ollama unreachable</span>`);
+    }
+    statPills.innerHTML = pills.join("");
+    lastSync.textContent = s.lastIngest ? `last sync · ${new Date(s.lastIngest).toLocaleTimeString()}` : "";
   } catch (err) {
-    statsBar.textContent = `stats error: ${err.message}`;
+    statPills.innerHTML = `<span class="pill warn">stats error</span>`;
+    lastSync.textContent = "";
   }
 }
 
@@ -87,7 +134,7 @@ async function doSearch() {
   if (!q) return;
   document.body.classList.remove("note-open");
   activePath = null;
-  const mode = modeSelect.value;
+  const mode = searchMode;
   const params = new URLSearchParams({ q });
   if (folderInput.value.trim()) params.set("folder", folderInput.value.trim());
   if (tagInput.value.trim()) params.set("tag", tagInput.value.trim());
@@ -289,8 +336,7 @@ async function openNote(p, { targetPane } = {}) {
   }
 }
 
-goBtn.addEventListener("click", doSearch);
-qInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
+qInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
 
 for (const btn of viewNav.querySelectorAll(".view-tab")) {
   btn.addEventListener("click", () => switchView(btn.dataset.view));

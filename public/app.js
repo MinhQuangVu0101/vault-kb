@@ -393,7 +393,10 @@ async function loadGraph() {
         openNote(node.id);
       });
     graphLoaded = true;
-    window.addEventListener("resize", () => graphInstance?.width(graphCanvas.clientWidth).height(graphCanvas.clientHeight));
+    const fitGraph = () => graphInstance?.width(graphCanvas.clientWidth).height(graphCanvas.clientHeight);
+    requestAnimationFrame(fitGraph);
+    const resizeObserver = new ResizeObserver(fitGraph);
+    resizeObserver.observe(graphCanvas);
   } catch (err) {
     graphCanvas.innerHTML = `<div class="error">Graph load failed: ${escape(err.message)}</div>`;
   }

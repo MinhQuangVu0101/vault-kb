@@ -59,6 +59,7 @@ function toggleTheme() {
     graphCanvas.innerHTML = '<div class="graph-empty">Loading…</div>';
     loadGraph();
   }
+  syncUrl();  // NEW
 }
 themeToggle?.addEventListener("click", toggleTheme);
 initTheme();
@@ -93,6 +94,7 @@ function switchView(name) {
   if (name === "orphans") loadOrphans();
   else if (name === "dead-links") loadDeadLinks();
   else if (name === "graph") loadGraph();
+  syncUrl();  // NEW
 }
 
 async function fetchJson(url) {
@@ -314,6 +316,7 @@ async function loadDeadLinks() {
 async function openNote(p, { targetPane } = {}) {
   const pane = targetPane ?? detail;
   activePath = p;
+  syncUrl();  // NEW — persist selected note path to URL
   document.body.classList.add("note-open");
   for (const el of results.querySelectorAll(".hit")) {
     el.classList.toggle("active", el.querySelector(".path")?.textContent === p);
@@ -374,6 +377,10 @@ function syncUrl() {
   if (searchMode !== "search") params.set("mode", searchMode);
   if (folderInput.value.trim()) params.set("folder", folderInput.value.trim());
   if (tagInput.value.trim()) params.set("tag", tagInput.value.trim());
+  if (activeView && activeView !== "search") params.set("view", activeView);
+  if (activePath) params.set("path", activePath);
+  const isDark = document.documentElement.classList.contains("theme-dark");
+  if (isDark) params.set("theme", "dark");
   const qs = params.toString();
   const newUrl = qs ? `?${qs}` : window.location.pathname;
   if (window.location.search !== (qs ? `?${qs}` : "")) {
@@ -383,10 +390,16 @@ function syncUrl() {
 
 function restoreFromUrl() {
   const params = new URLSearchParams(window.location.search);
+  const theme = params.get("theme");
+  if (theme === "dark" || theme === "light") {
+    applyTheme(theme);
+  }
   const q = params.get("q");
   const mode = params.get("mode");
   const folder = params.get("folder");
   const tag = params.get("tag");
+  const view = params.get("view");
+  const path = params.get("path");
   if (folder) folderInput.value = folder;
   if (tag) tagInput.value = tag;
   if (mode === "semantic") {
@@ -398,7 +411,17 @@ function restoreFromUrl() {
   }
   if (q) {
     qInput.value = q;
-    doSearch();
+    doSearch().then(() => {
+      if (path) {
+        // Wait a tick for renderHits to finish, then select the path
+        setTimeout(() => openNote(path), 50);
+      }
+    });
+  } else if (path) {
+    openNote(path);
+  }
+  if (view && view !== "search") {
+    switchView(view);
   }
 }
 

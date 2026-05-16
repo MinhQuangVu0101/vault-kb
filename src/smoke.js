@@ -22,6 +22,7 @@ const client = new Client({
 const transport = new StdioClientTransport({
   command: "node",
   args: [serverEntry],
+  env: process.env,
   stderr: "pipe",
 });
 

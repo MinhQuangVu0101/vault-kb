@@ -436,7 +436,28 @@ test("GET /api/dead-links with out-of-range limit returns 400", async () => {
 });
 
 test("GET /api/graph returns nodes and links arrays", async () => {
-  await withServer(async (base) => {
+  // Custom fixture with tags to catch the split bug
+  const v = tmpVault();
+  write(v, "a.md", { "ai-access": true, status: "active", tags: ["mcp", "ai"] }, "links to [[B]] hello world");
+  write(v, "b.md", { "ai-access": true, status: "active" }, "body of B");
+  const config = mkConfig(v);
+  const index = new VaultIndex(config);
+  index.ingest();
+
+  const web = createWebServer({
+    vaultIndex: index,
+    statsSource: () => ({
+      indexed: 2,
+      watcher: { active: false, events: null },
+      embeddings: { covered: 0, total: 2, reachable: null, model: null, lastError: null },
+      lastIngest: new Date().toISOString(),
+    }),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  const info = await web.start();
+  const base = `http://${info.host}:${info.port}`;
+  try {
     const res = await fetch(`${base}/api/graph`);
     assert.equal(res.status, 200);
     const json = await res.json();
@@ -452,10 +473,15 @@ test("GET /api/graph returns nodes and links arrays", async () => {
     assert.equal(typeof a.folder, "string");
     assert.equal(typeof a.backlinkCount, "number");
     assert.ok(Array.isArray(a.tags));
+    // tags should be properly split (not with commas attached)
+    assert.deepEqual(a.tags, ["mcp", "ai"], "tags are split correctly in input order");
     // resolved link a → b exists
     const linkAB = json.links.find((l) => l.source === "a.md" && l.target === "b.md");
     assert.ok(linkAB, "resolved link a.md → b.md");
-  });
+  } finally {
+    await web.stop();
+    index.close();
+  }
 });
 
 test("GET /api/graph on empty vault returns empty arrays", async () => {

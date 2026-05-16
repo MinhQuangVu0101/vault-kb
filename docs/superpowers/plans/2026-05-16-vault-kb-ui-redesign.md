@@ -119,7 +119,7 @@ Append in `src/vault-index.js` after `findDeadLinks` closing brace (around line 
     const linkRows = this.db.prepare(`
       SELECT source, target
       FROM links
-      WHERE unresolved = 0 AND target IS NOT NULL
+      WHERE unresolved = 0
       ORDER BY source, target
     `).all();
 
@@ -130,7 +130,7 @@ Append in `src/vault-index.js` after `findDeadLinks` closing brace (around line 
       folder: row.folder ?? "",
       backlinkCount: counts.get(row.path) ?? 0,
       tags: row.tags_text
-        ? row.tags_text.split(/\s+/).filter(Boolean)
+        ? row.tags_text.split(/,\s*/).filter(Boolean)
         : [],
     }));
 

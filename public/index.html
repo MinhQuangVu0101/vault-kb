@@ -38,10 +38,11 @@
               <button type="button" data-mode="semantic">semantic</button>
             </div>
           </div>
-          <div class="filter-row">
-            <button class="chip on" id="chip-all" type="button" title="Clear folder + tag filters">all folders</button>
-            <label class="chip"><input type="text" id="folder" placeholder="folder…"></label>
-            <label class="chip"><input type="text" id="tag" placeholder="tag…"></label>
+          <div class="filter-row" id="filter-row">
+            <button class="chip on" id="chip-all" type="button" title="Clear all filters">all</button>
+            <span id="folder-chips" class="chip-group"></span>
+            <label class="chip" title="Custom folder filter"><input type="text" id="folder" placeholder="folder…"></label>
+            <label class="chip" title="Tag filter"><input type="text" id="tag" placeholder="tag…"></label>
           </div>
         </section>
         <div class="two-pane">
@@ -51,7 +52,17 @@
       </section>
 
       <section id="view-graph" class="view hidden">
-        <div class="view-header"><h2>Graph</h2><p class="hint">All AI-accessible notes and their wikilinks.</p></div>
+        <div class="view-header">
+          <div>
+            <h2>Graph</h2>
+            <p class="hint">All AI-accessible notes and their wikilinks. <span id="graph-counts"></span></p>
+          </div>
+          <div class="graph-filters">
+            <select id="graph-folder-filter"><option value="">all folders</option></select>
+            <select id="graph-tag-filter"><option value="">all tags</option></select>
+            <input id="graph-text-filter" type="search" placeholder="search…">
+          </div>
+        </div>
         <div id="graph-canvas"><div class="graph-empty">Loading…</div></div>
       </section>
 

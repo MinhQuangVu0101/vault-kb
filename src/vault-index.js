@@ -479,6 +479,34 @@ export class VaultIndex {
     return map;
   }
 
+  getTopFolders(limit = 10) {
+    return this.db.prepare(`
+      SELECT folder, COUNT(*) AS count
+      FROM notes
+      WHERE folder IS NOT NULL AND folder != ''
+      GROUP BY folder
+      ORDER BY count DESC, folder ASC
+      LIMIT ?
+    `).all(limit).map((r) => ({ folder: r.folder, count: r.count }));
+  }
+
+  getTopTags(limit = 10) {
+    const rows = this.db.prepare(`
+      SELECT tags_text FROM notes WHERE tags_text IS NOT NULL AND tags_text != ''
+    `).all();
+    const counts = new Map();
+    for (const r of rows) {
+      for (const tag of r.tags_text.split(/,\s*/)) {
+        if (!tag) continue;
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, limit)
+      .map(([tag, count]) => ({ tag, count }));
+  }
+
   pruneOrphanEmbeddings() {
     const orphans = this.findOrphanEmbeddingsStmt.all().map((r) => r.path);
     if (orphans.length === 0) return 0;

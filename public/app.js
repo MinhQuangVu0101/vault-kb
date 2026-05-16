@@ -25,6 +25,10 @@ let activeView = "search";
 let searchMode = "search"; // "search" or "semantic"
 let graphInstance = null;
 let graphLoaded = false;
+let graphRawData = null;
+let graphFolderFilter = "";
+let graphTagFilter = "";
+let graphTextFilter = "";
 
 /* THEME */
 const THEME_KEY = "vault-kb-theme";
@@ -73,6 +77,8 @@ modeSwitch?.addEventListener("click", (e) => {
 chipAll?.addEventListener("click", () => {
   folderInput.value = "";
   tagInput.value = "";
+  for (const b of document.querySelectorAll("#folder-chips .folder-chip")) b.classList.remove("on");
+  syncUrl();
 });
 
 function switchView(name) {
@@ -112,6 +118,7 @@ async function loadStats() {
       pills.push(`<span class="pill warn"><span class="dot"></span>ollama unreachable</span>`);
     }
     statPills.innerHTML = pills.join("");
+    renderFolderChips(s.topFolders ?? []);
     lastSync.textContent = s.lastIngest ? `last sync · ${new Date(s.lastIngest).toLocaleTimeString()}` : "";
   } catch (err) {
     console.warn("loadStats failed:", err);
@@ -151,6 +158,7 @@ async function doSearch() {
   if (!q) return;
   document.body.classList.remove("note-open");
   activePath = null;
+  syncUrl();
   const mode = searchMode;
   const params = new URLSearchParams({ q });
   if (folderInput.value.trim()) params.set("folder", folderInput.value.trim());
@@ -359,9 +367,68 @@ for (const btn of viewNav.querySelectorAll(".view-tab")) {
   btn.addEventListener("click", () => switchView(btn.dataset.view));
 }
 
+function syncUrl() {
+  const params = new URLSearchParams();
+  const q = qInput.value.trim();
+  if (q) params.set("q", q);
+  if (searchMode !== "search") params.set("mode", searchMode);
+  if (folderInput.value.trim()) params.set("folder", folderInput.value.trim());
+  if (tagInput.value.trim()) params.set("tag", tagInput.value.trim());
+  const qs = params.toString();
+  const newUrl = qs ? `?${qs}` : window.location.pathname;
+  if (window.location.search !== (qs ? `?${qs}` : "")) {
+    history.replaceState(null, "", newUrl);
+  }
+}
+
+function restoreFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const q = params.get("q");
+  const mode = params.get("mode");
+  const folder = params.get("folder");
+  const tag = params.get("tag");
+  if (folder) folderInput.value = folder;
+  if (tag) tagInput.value = tag;
+  if (mode === "semantic") {
+    searchMode = "semantic";
+    const btn = modeSwitch?.querySelector('button[data-mode="semantic"]');
+    if (btn) {
+      for (const b of modeSwitch.querySelectorAll("button")) b.classList.toggle("on", b === btn);
+    }
+  }
+  if (q) {
+    qInput.value = q;
+    doSearch();
+  }
+}
+
+function renderFolderChips(folders) {
+  const container = document.getElementById("folder-chips");
+  if (!container) return;
+  if (!folders.length) {
+    container.innerHTML = "";
+    return;
+  }
+  container.innerHTML = folders.slice(0, 5).map((f) =>
+    `<button class="chip folder-chip" type="button" data-folder="${escape(f.folder)}">${escape(f.folder)} <span class="chip-count">${f.count}</span></button>`
+  ).join("");
+  for (const btn of container.querySelectorAll("button.folder-chip")) {
+    btn.addEventListener("click", () => {
+      const folder = btn.dataset.folder;
+      const isActive = btn.classList.contains("on");
+      for (const b of container.querySelectorAll("button.folder-chip")) b.classList.remove("on");
+      folderInput.value = isActive ? "" : folder;
+      if (!isActive) btn.classList.add("on");
+      syncUrl();
+      if (qInput.value.trim()) doSearch();
+    });
+  }
+}
+
 loadStats();
 setInterval(loadStats, 5000);
 loadIdentity();
+restoreFromUrl();
 
 /* GRAPH */
 const FOLDER_COLORS = {
@@ -386,13 +453,15 @@ async function loadGraph() {
   graphCanvas.innerHTML = '<div class="graph-empty">Loading graph…</div>';
   try {
     const data = await fetchJson("/api/graph");
+    graphRawData = data;
     if (!data.nodes.length) {
       graphCanvas.innerHTML = '<div class="graph-empty">No notes indexed yet.</div>';
       return;
     }
+    populateGraphFilters(data);
     graphCanvas.innerHTML = "";
     graphInstance = ForceGraph()(graphCanvas)
-      .graphData(data)
+      .graphData(applyGraphFilters())
       .nodeId("id")
       .nodeLabel((n) => n.title)
       .nodeVal((n) => 1 + (n.backlinkCount ?? 0) * 0.6)
@@ -411,5 +480,57 @@ async function loadGraph() {
     resizeObserver.observe(graphCanvas);
   } catch (err) {
     graphCanvas.innerHTML = `<div class="error">Graph load failed: ${escape(err.message)}</div>`;
+  }
+}
+
+function populateGraphFilters(data) {
+  const folderSel = document.getElementById("graph-folder-filter");
+  const tagSel = document.getElementById("graph-tag-filter");
+  const textInput = document.getElementById("graph-text-filter");
+  if (!folderSel || !tagSel || !textInput) return;
+  const folders = new Set();
+  const tags = new Set();
+  for (const n of data.nodes) {
+    if (n.folder) folders.add(n.folder);
+    for (const t of n.tags ?? []) tags.add(t);
+  }
+  folderSel.innerHTML = '<option value="">all folders</option>' + [...folders].sort().map((f) => `<option value="${escape(f)}">${escape(f)}</option>`).join("");
+  tagSel.innerHTML = '<option value="">all tags</option>' + [...tags].sort().map((t) => `<option value="${escape(t)}">${escape(t)}</option>`).join("");
+  folderSel.value = graphFolderFilter;
+  tagSel.value = graphTagFilter;
+  textInput.value = graphTextFilter;
+  folderSel.addEventListener("change", (e) => { graphFolderFilter = e.target.value; refreshGraph(); });
+  tagSel.addEventListener("change", (e) => { graphTagFilter = e.target.value; refreshGraph(); });
+  textInput.addEventListener("input", (e) => { graphTextFilter = e.target.value.toLowerCase(); refreshGraph(); });
+}
+
+function applyGraphFilters() {
+  if (!graphRawData) return { nodes: [], links: [] };
+  const nodeMatches = (n) => {
+    if (graphFolderFilter && n.folder !== graphFolderFilter) return false;
+    if (graphTagFilter && !(n.tags ?? []).includes(graphTagFilter)) return false;
+    if (graphTextFilter && !n.title.toLowerCase().includes(graphTextFilter) && !n.id.toLowerCase().includes(graphTextFilter)) return false;
+    return true;
+  };
+  const nodes = graphRawData.nodes.filter(nodeMatches);
+  const nodeIds = new Set(nodes.map((n) => n.id));
+  const links = graphRawData.links.filter((l) => nodeIds.has(l.source.id ?? l.source) && nodeIds.has(l.target.id ?? l.target));
+  updateGraphCounts(nodes, links);
+  return { nodes, links };
+}
+
+function refreshGraph() {
+  if (!graphInstance || !graphRawData) return;
+  graphInstance.graphData(applyGraphFilters());
+}
+
+function updateGraphCounts(nodes, links) {
+  const el = document.getElementById("graph-counts");
+  if (!el || !graphRawData) return;
+  const total = graphRawData.nodes.length;
+  if (nodes.length === total) {
+    el.textContent = `(${total} nodes · ${links.length} links)`;
+  } else {
+    el.textContent = `(${nodes.length} / ${total} nodes · ${links.length} links)`;
   }
 }

@@ -209,6 +209,8 @@ main {
   cursor: pointer;
 }
 .chip.on { background: var(--text-1); color: var(--bg-1); border-color: var(--text-1); }
+.chip-group { display: contents; }
+.chip-count { opacity: 0.55; margin-left: 4px; font-variant-numeric: tabular-nums; }
 .chip input {
   background: transparent;
   border: none;
@@ -348,3 +350,17 @@ main {
 }
 .back-to-results:hover { background: var(--bg-3); }
 @media (max-width: 600px) { .back-to-results { display: inline-flex; align-items: center; } }
+
+.graph-filters { display: flex; gap: var(--sp-2); align-items: center; }
+.graph-filters select, .graph-filters input {
+  background: var(--bg-2);
+  color: var(--text-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--radius-md);
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.graph-filters select:focus, .graph-filters input:focus { border-color: var(--accent); }
+#graph-counts { font-family: var(--font-mono); font-size: 11px; opacity: 0.7; }

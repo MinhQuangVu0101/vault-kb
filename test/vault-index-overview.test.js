@@ -78,3 +78,25 @@ test("overview: empty vault returns zero totals and empty arrays", () => {
   vi.close();
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("overview: totalNotes includes root-level notes; topLevelFolders excludes them", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-overview-root-"));
+  const writeNote = (rel, body) => {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, body);
+  };
+  writeNote("RootNote.md",            "---\nai-access: true\ntitle: RootNote\n---\nAt root.");
+  writeNote("10 Projects/InFolder.md", "---\nai-access: true\ntitle: InFolder\n---\nIn folder.");
+
+  const vi = new VaultIndex(mkConfig(root));
+  vi.ingest();
+
+  const ov = vi.overview();
+  assert.equal(ov.totalNotes, 2, "totalNotes counts the root-level note + the folder note");
+  assert.equal(ov.topLevelFolders.length, 1, "topLevelFolders has only the one folder, not the root");
+  assert.equal(ov.topLevelFolders[0].path, "10 Projects");
+
+  vi.close();
+  fs.rmSync(root, { recursive: true, force: true });
+});

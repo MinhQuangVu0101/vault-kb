@@ -808,14 +808,15 @@ export class VaultIndex {
   overview() {
     this.ensureIndexed();
 
+    const totalRow = this.db.prepare("SELECT COUNT(*) AS total FROM notes").get();
+    const totalNotes = totalRow?.total ?? 0;
+
     const folderRows = this.db.prepare(
       "SELECT folder, COUNT(*) AS noteCount FROM notes WHERE folder <> '' GROUP BY folder",
     ).all();
 
     const byTop = new Map();
-    let totalNotes = 0;
     for (const { folder, noteCount } of folderRows) {
-      totalNotes += noteCount;
       const top = folder.split("/")[0];
       let entry = byTop.get(top);
       if (!entry) {

@@ -146,3 +146,74 @@ test("tree: path normalization — trailing slash treated same as no slash", () 
   vi.close();
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("tree: LIKE special characters in folder names do not over-match siblings", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-tree-like-"));
+  const writeNote = (rel, body) => {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, body);
+  };
+  // my_folder vs myXfolder — underscore in LIKE matches any single character
+  writeNote("my_folder/A.md",       "---\nai-access: true\ntitle: A\n---\nA.");
+  writeNote("my_folder/sub/B.md",   "---\nai-access: true\ntitle: B\n---\nB.");
+  writeNote("myXfolder/sub/D.md",   "---\nai-access: true\ntitle: D\n---\nD.");
+
+  const vi = new VaultIndex(mkConfig(root));
+  vi.ingest();
+
+  const t = vi.tree({ path: "my_folder" });
+  assert.equal(t.path, "my_folder");
+  assert.equal(t.noteCount, 2, "must NOT include myXfolder/sub/D.md");
+  assert.equal(t.children.length, 1);
+  assert.equal(t.children[0].path, "my_folder/sub");
+
+  vi.close();
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("tree: percent in folder name does not over-match", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-tree-percent-"));
+  const writeNote = (rel, body) => {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, body);
+  };
+  writeNote("100% Done/A.md",       "---\nai-access: true\ntitle: A\n---\nA.");
+  writeNote("100X Done/child/B.md", "---\nai-access: true\ntitle: B\n---\nB.");
+
+  const vi = new VaultIndex(mkConfig(root));
+  vi.ingest();
+
+  const t = vi.tree({ path: "100% Done" });
+  assert.equal(t.noteCount, 1, "must NOT include 100X Done/child/B.md");
+
+  vi.close();
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("tree: root noteCount includes root-level notes (consistent with overview.totalNotes)", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-tree-root-"));
+  const writeNote = (rel, body) => {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, body);
+  };
+  writeNote("AtRoot.md",               "---\nai-access: true\ntitle: AtRoot\n---\nRoot note.");
+  writeNote("10 Projects/InFolder.md", "---\nai-access: true\ntitle: InFolder\n---\nFolder note.");
+
+  const vi = new VaultIndex(mkConfig(root));
+  vi.ingest();
+
+  const t = vi.tree({});
+  assert.equal(t.noteCount, 2, "root-level note is counted in tree({}).noteCount");
+  assert.equal(t.children.length, 1, "but no top-level entry for root-level note");
+  assert.equal(t.children[0].path, "10 Projects");
+
+  // And cross-check that this matches overview.totalNotes
+  const ov = vi.overview();
+  assert.equal(t.noteCount, ov.totalNotes, "tree({}).noteCount === overview().totalNotes");
+
+  vi.close();
+  fs.rmSync(root, { recursive: true, force: true });
+});

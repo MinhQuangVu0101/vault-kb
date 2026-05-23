@@ -275,8 +275,9 @@ export class VaultIndex {
       "SELECT folder, COUNT(*) AS noteCount FROM notes WHERE folder <> '' GROUP BY folder",
     );
     this.treeSubtreeStmt = this.db.prepare(
-      "SELECT folder, COUNT(*) AS noteCount FROM notes WHERE (folder = ? OR folder LIKE ?) GROUP BY folder",
+      "SELECT folder, COUNT(*) AS noteCount FROM notes WHERE (folder = ? OR folder LIKE ? ESCAPE '\\') GROUP BY folder",
     );
+    this.treeRootDirectStmt = this.db.prepare("SELECT COUNT(*) AS n FROM notes WHERE folder = ''");
     this.searchBaseSql = `
       SELECT
         notes.path,
@@ -867,7 +868,9 @@ export class VaultIndex {
     if (normalizedRoot === "") {
       folderRows = this.treeRootStmt.all();
     } else {
-      folderRows = this.treeSubtreeStmt.all(normalizedRoot, `${normalizedRoot}/%`);
+      // Escape LIKE special characters (_ % \) so subtree match doesn't bleed into siblings.
+      const likeRoot = normalizedRoot.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+      folderRows = this.treeSubtreeStmt.all(normalizedRoot, `${likeRoot}/%`);
     }
 
     // Each node holds: noteCountDirect (notes whose folder column == this path), children: Map<segment, node>.
@@ -893,6 +896,10 @@ export class VaultIndex {
         cursor = cursor.children.get(seg);
       }
       cursor.noteCountDirect += noteCount;
+    }
+
+    if (normalizedRoot === "") {
+      rootNode.noteCountDirect += this.treeRootDirectStmt.get()?.n ?? 0;
     }
 
     // Recursive: returns { total, node }. Truncates children below maxDepth.

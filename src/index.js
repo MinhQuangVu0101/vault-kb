@@ -183,7 +183,7 @@ if (args.has("--web")) {
 
 const server = new McpServer({
   name: "quangs-vault-mcp",
-  version: "0.1.0",
+  version: "0.3.0",
 }, {
   capabilities: {
     tools: {},

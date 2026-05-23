@@ -50,4 +50,5 @@ Initial public release on npm. Captures everything shipped through Phase 1 (Foun
 - Semantic search requires a running Ollama instance and a pulled embedding model (`ollama pull nomic-embed-text`). Without it, keyword + fuzzy search still work.
 - `better-sqlite3` is a native module; first install compiles on systems without a prebuild.
 
+[0.3.0]: https://github.com/MinhQuangVu0101/vault-kb/releases/tag/v0.3.0
 [0.2.0]: https://github.com/MinhQuangVu0101/vault-kb/releases/tag/v0.2.0

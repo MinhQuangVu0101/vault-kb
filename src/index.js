@@ -369,6 +369,26 @@ server.registerTool("kb_bulk_update", {
   return toolText(JSON.stringify(result, null, 2));
 }));
 
+server.registerTool("kb_overview", {
+  title: "Vault overview",
+  description: "Entry point for vault exploration. Run this first when working in the user's Obsidian vault — returns a one-shot snapshot of total note count, top-level folder breakdown, and recently-touched notes. Use the returned folder paths with kb_tree (drill-in) or kb_list (notes within a folder). No arguments.",
+}, wrapTool("kb_overview", async () => {
+  const ov = vaultIndex.overview();
+  return toolText(JSON.stringify(ov, null, 2));
+}));
+
+server.registerTool("kb_tree", {
+  title: "Folder tree",
+  description: "Return a hierarchical folder tree with note counts per folder. Use after kb_overview to drill into a specific section of the vault. Returns folder structure only — no note titles. For listing notes inside a folder, use kb_list. Defaults to vault root, depth 2.",
+  inputSchema: {
+    path: z.string().optional(),
+    depth: z.number().int().min(0).max(6).optional(),
+  },
+}, wrapTool("kb_tree", async ({ path: treePath, depth }) => {
+  const t = vaultIndex.tree({ path: treePath, depth });
+  return toolText(JSON.stringify(t, null, 2));
+}));
+
 server.registerTool("kb_stats", {
   title: "Index health stats",
   description: "Report vault-kb index health: counts, skip breakdown, last ingest, recent errors.",

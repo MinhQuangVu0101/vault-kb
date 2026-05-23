@@ -805,6 +805,46 @@ export class VaultIndex {
     return this.#annotateBacklinkCounts(rows);
   }
 
+  overview() {
+    this.ensureIndexed();
+
+    const folderRows = this.db.prepare(
+      "SELECT folder, COUNT(*) AS noteCount FROM notes WHERE folder <> '' GROUP BY folder",
+    ).all();
+
+    const byTop = new Map();
+    let totalNotes = 0;
+    for (const { folder, noteCount } of folderRows) {
+      totalNotes += noteCount;
+      const top = folder.split("/")[0];
+      let entry = byTop.get(top);
+      if (!entry) {
+        entry = { path: top, noteCount: 0, subfolders: new Set() };
+        byTop.set(top, entry);
+      }
+      entry.noteCount += noteCount;
+      if (folder !== top) {
+        entry.subfolders.add(folder.split("/")[1]);
+      }
+    }
+
+    const topLevelFolders = Array.from(byTop.values())
+      .map((e) => ({ path: e.path, noteCount: e.noteCount, subfolderCount: e.subfolders.size }))
+      .sort((a, b) => b.noteCount - a.noteCount || a.path.localeCompare(b.path));
+
+    const recentRows = this.db.prepare(
+      "SELECT path, title, updated FROM notes WHERE updated IS NOT NULL ORDER BY updated DESC LIMIT 5",
+    ).all();
+
+    return {
+      vaultRoot: this.config.vaultRoot,
+      indexedAt: this.getLastIngestedAt(),
+      totalNotes,
+      topLevelFolders,
+      recentlyTouched: recentRows,
+    };
+  }
+
   readNote(requestedPath, maxChars) {
     const relativePath = normalizeRelativeVaultPath(requestedPath);
     if (this.isHardExcluded(relativePath)) {

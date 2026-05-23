@@ -192,7 +192,7 @@ const server = new McpServer({
 
 server.registerTool("kb_search", {
   title: "Search vault notes",
-  description: "Search AI-accessible Obsidian notes with SQLite FTS5 keyword search.",
+  description: "Search AI-accessible Obsidian notes with SQLite FTS5 keyword search. For browsing vault structure, prefer kb_overview + kb_tree. Use this for keyword content matches.",
   inputSchema: {
     query: z.string().min(1),
     folder: z.string().min(1).optional(),
@@ -206,7 +206,7 @@ server.registerTool("kb_search", {
 
 server.registerTool("kb_read", {
   title: "Read a note",
-  description: "Read one AI-accessible note by vault-relative path.",
+  description: "Read one AI-accessible note by vault-relative path. Use after kb_search, kb_list, or kb_tree once you have a specific path.",
   inputSchema: {
     path: z.string().min(1),
     maxChars: z.number().int().positive().optional(),
@@ -218,7 +218,7 @@ server.registerTool("kb_read", {
 
 server.registerTool("kb_list", {
   title: "List notes",
-  description: "List AI-accessible notes by folder, tag, or status.",
+  description: "List AI-accessible notes by folder, tag, or status. Use after kb_overview or kb_tree to enumerate notes within a known folder.",
   inputSchema: {
     folder: z.string().min(1).optional(),
     tag: z.string().min(1).optional(),
@@ -248,7 +248,7 @@ server.registerTool("kb_ingest", {
 
 server.registerTool("kb_semantic", {
   title: "Semantic search",
-  description: "Embedding-based search via local Ollama. Returns notes ranked by cosine similarity. Requires Ollama running and embeddings populated.",
+  description: "Embedding-based search via local Ollama. Returns notes ranked by cosine similarity. Requires Ollama running and embeddings populated. For browsing vault structure, prefer kb_overview + kb_tree. Use this for meaning-based content matches.",
   inputSchema: {
     query: z.string().min(1),
     folder: z.string().min(1).optional(),
@@ -285,7 +285,7 @@ server.registerTool("kb_suggest_links", {
 
 server.registerTool("kb_related", {
   title: "Related notes",
-  description: "For a given note, return top-N most similar notes regardless of link status. Uses embedding cosine similarity. Lower-friction sibling of kb_suggest_links — no link-graph filtering.",
+  description: "For a given note, return top-N most similar notes regardless of link status. Uses embedding cosine similarity. Lower-friction sibling of kb_suggest_links — no link-graph filtering. Use after you have a specific note path. For discovering vault structure, use kb_tree.",
   inputSchema: {
     path: z.string().min(1),
     limit: z.number().int().min(1).max(20).optional(),

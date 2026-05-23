@@ -589,8 +589,10 @@ export class VaultIndex {
     const params = [];
     if (folder) {
       const f = normalizeRelativeVaultPath(folder);
-      filterSql.push("AND (folder = ? OR folder LIKE ?)");
-      params.push(f, `${f}/%`);
+      // Escape LIKE special characters (_ % \) so subtree match doesn't bleed into siblings.
+      const likeF = f.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+      filterSql.push("AND (folder = ? OR folder LIKE ? ESCAPE '\\')");
+      params.push(f, `${likeF}/%`);
     }
     if (tag) {
       const t = String(tag).replace(/^#/, "").toLowerCase();
@@ -752,8 +754,10 @@ export class VaultIndex {
 
     if (folder) {
       const normalizedFolder = normalizeRelativeVaultPath(folder);
-      sqlParts.push("AND (notes.folder = ? OR notes.folder LIKE ?)");
-      params.push(normalizedFolder, `${normalizedFolder}/%`);
+      // Escape LIKE special characters (_ % \) so subtree match doesn't bleed into siblings.
+      const likeFolder = normalizedFolder.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+      sqlParts.push("AND (notes.folder = ? OR notes.folder LIKE ? ESCAPE '\\')");
+      params.push(normalizedFolder, `${likeFolder}/%`);
     }
 
     if (tag) {
@@ -797,8 +801,10 @@ export class VaultIndex {
 
     if (folder) {
       const normalizedFolder = normalizeRelativeVaultPath(folder);
-      sqlParts.push("AND (folder = ? OR folder LIKE ?)");
-      params.push(normalizedFolder, `${normalizedFolder}/%`);
+      // Escape LIKE special characters (_ % \) so subtree match doesn't bleed into siblings.
+      const likeFolder = normalizedFolder.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+      sqlParts.push("AND (folder = ? OR folder LIKE ? ESCAPE '\\')");
+      params.push(normalizedFolder, `${likeFolder}/%`);
     }
 
     if (tag) {

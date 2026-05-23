@@ -264,6 +264,13 @@ export class VaultIndex {
     this.backlinkCountStmt = this.db.prepare(
       "SELECT target AS path, COUNT(*) AS c FROM links WHERE unresolved = 0 GROUP BY target",
     );
+    this.overviewTotalStmt = this.db.prepare("SELECT COUNT(*) AS total FROM notes");
+    this.overviewFoldersStmt = this.db.prepare(
+      "SELECT folder, COUNT(*) AS noteCount FROM notes WHERE folder <> '' GROUP BY folder",
+    );
+    this.overviewRecentStmt = this.db.prepare(
+      "SELECT path, title, updated FROM notes ORDER BY updated DESC LIMIT 5",
+    );
     this.searchBaseSql = `
       SELECT
         notes.path,
@@ -808,12 +815,10 @@ export class VaultIndex {
   overview() {
     this.ensureIndexed();
 
-    const totalRow = this.db.prepare("SELECT COUNT(*) AS total FROM notes").get();
+    const totalRow = this.overviewTotalStmt.get();
     const totalNotes = totalRow?.total ?? 0;
 
-    const folderRows = this.db.prepare(
-      "SELECT folder, COUNT(*) AS noteCount FROM notes WHERE folder <> '' GROUP BY folder",
-    ).all();
+    const folderRows = this.overviewFoldersStmt.all();
 
     const byTop = new Map();
     for (const { folder, noteCount } of folderRows) {
@@ -833,9 +838,7 @@ export class VaultIndex {
       .map((e) => ({ path: e.path, noteCount: e.noteCount, subfolderCount: e.subfolders.size }))
       .sort((a, b) => b.noteCount - a.noteCount || a.path.localeCompare(b.path));
 
-    const recentRows = this.db.prepare(
-      "SELECT path, title, updated FROM notes WHERE updated IS NOT NULL ORDER BY updated DESC LIMIT 5",
-    ).all();
+    const recentRows = this.overviewRecentStmt.all();
 
     return {
       vaultRoot: this.config.vaultRoot,

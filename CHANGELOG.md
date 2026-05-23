@@ -2,6 +2,15 @@
 
 All notable changes to vault-kb. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## [0.3.0] — 2026-05-23
+
+### Added
+- `kb_overview` — entry-point snapshot of the vault: total note count, top-level folders with recursive note counts and subfolder counts, recently touched notes. Designed as the "start here" call for AI clients so they consult the vault before reaching for other context.
+- `kb_tree` — hierarchical folder tree with recursive note counts per folder. Parameters: `path` (optional, default vault root), `depth` (optional, default 2, max 6).
+
+### Changed
+- Tool descriptions for `kb_search`, `kb_read`, `kb_list`, `kb_semantic`, and `kb_related` now include workflow hints pointing to `kb_overview` / `kb_tree` for vault-structure discovery.
+
 ## [0.2.0] — 2026-05-16
 
 Initial public release on npm. Captures everything shipped through Phase 1 (Foundation) and Phase 2 (Features).

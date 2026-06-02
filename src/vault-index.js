@@ -264,6 +264,20 @@ export class VaultIndex {
     this.backlinkCountStmt = this.db.prepare(
       "SELECT target AS path, COUNT(*) AS c FROM links WHERE unresolved = 0 GROUP BY target",
     );
+    this.overviewTotalStmt = this.db.prepare("SELECT COUNT(*) AS total FROM notes");
+    this.overviewFoldersStmt = this.db.prepare(
+      "SELECT folder, COUNT(*) AS noteCount FROM notes WHERE folder <> '' GROUP BY folder",
+    );
+    this.overviewRecentStmt = this.db.prepare(
+      "SELECT path, title, updated FROM notes ORDER BY updated DESC LIMIT 5",
+    );
+    this.treeRootStmt = this.db.prepare(
+      "SELECT folder, COUNT(*) AS noteCount FROM notes WHERE folder <> '' GROUP BY folder",
+    );
+    this.treeSubtreeStmt = this.db.prepare(
+      "SELECT folder, COUNT(*) AS noteCount FROM notes WHERE (folder = ? OR folder LIKE ? ESCAPE '\\') GROUP BY folder",
+    );
+    this.treeRootDirectStmt = this.db.prepare("SELECT COUNT(*) AS n FROM notes WHERE folder = ''");
     this.searchBaseSql = `
       SELECT
         notes.path,
@@ -803,6 +817,111 @@ export class VaultIndex {
 
     const rows = this.db.prepare(sqlParts.join(" ")).all(...params);
     return this.#annotateBacklinkCounts(rows);
+  }
+
+  overview() {
+    this.ensureIndexed();
+
+    const totalRow = this.overviewTotalStmt.get();
+    const totalNotes = totalRow?.total ?? 0;
+
+    const folderRows = this.overviewFoldersStmt.all();
+
+    const byTop = new Map();
+    for (const { folder, noteCount } of folderRows) {
+      const top = folder.split("/")[0];
+      let entry = byTop.get(top);
+      if (!entry) {
+        entry = { path: top, noteCount: 0, subfolders: new Set() };
+        byTop.set(top, entry);
+      }
+      entry.noteCount += noteCount;
+      if (folder !== top) {
+        entry.subfolders.add(folder.split("/")[1]);
+      }
+    }
+
+    const topLevelFolders = Array.from(byTop.values())
+      .map((e) => ({ path: e.path, noteCount: e.noteCount, subfolderCount: e.subfolders.size }))
+      .sort((a, b) => b.noteCount - a.noteCount || a.path.localeCompare(b.path));
+
+    const recentRows = this.overviewRecentStmt.all();
+
+    return {
+      vaultRoot: this.config.vaultRoot,
+      indexedAt: this.getLastIngestedAt(),
+      totalNotes,
+      topLevelFolders,
+      recentlyTouched: recentRows,
+    };
+  }
+
+  tree({ path: rootPath, depth } = {}) {
+    this.ensureIndexed();
+
+    const normalizedRoot = typeof rootPath === "string"
+      ? rootPath.replace(/^\/+/, "").replace(/\/+$/, "")
+      : "";
+    const maxDepth = Number.isInteger(depth) ? Math.min(Math.max(depth, 0), 6) : 2;
+
+    let folderRows;
+    if (normalizedRoot === "") {
+      folderRows = this.treeRootStmt.all();
+    } else {
+      // Escape LIKE special characters (_ % \) so subtree match doesn't bleed into siblings.
+      const likeRoot = normalizedRoot.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+      folderRows = this.treeSubtreeStmt.all(normalizedRoot, `${likeRoot}/%`);
+    }
+
+    // Each node holds: noteCountDirect (notes whose folder column == this path), children: Map<segment, node>.
+    const makeNode = (p) => ({ path: p, noteCountDirect: 0, children: new Map() });
+    const rootNode = makeNode(normalizedRoot);
+
+    for (const { folder, noteCount } of folderRows) {
+      // path of this row relative to the rootNode
+      const relative = normalizedRoot === ""
+        ? folder
+        : folder === normalizedRoot
+          ? ""
+          : folder.slice(normalizedRoot.length + 1);
+      const segments = relative === "" ? [] : relative.split("/");
+
+      let cursor = rootNode;
+      let accumulatedPath = normalizedRoot;
+      for (const seg of segments) {
+        accumulatedPath = accumulatedPath === "" ? seg : `${accumulatedPath}/${seg}`;
+        if (!cursor.children.has(seg)) {
+          cursor.children.set(seg, makeNode(accumulatedPath));
+        }
+        cursor = cursor.children.get(seg);
+      }
+      cursor.noteCountDirect += noteCount;
+    }
+
+    if (normalizedRoot === "") {
+      rootNode.noteCountDirect += this.treeRootDirectStmt.get()?.n ?? 0;
+    }
+
+    // Recursive: returns { total, node }. Truncates children below maxDepth.
+    const serialize = (node, remainingDepth) => {
+      const childEntries = Array.from(node.children.values());
+      let total = node.noteCountDirect;
+      const serializedChildren = [];
+      for (const child of childEntries) {
+        const { total: childTotal, node: childNode } = serialize(child, Math.max(remainingDepth - 1, 0));
+        total += childTotal;
+        if (remainingDepth > 0) serializedChildren.push(childNode);
+      }
+      serializedChildren.sort((a, b) =>
+        b.noteCount - a.noteCount || a.path.localeCompare(b.path),
+      );
+      return {
+        total,
+        node: { path: node.path, noteCount: total, children: serializedChildren },
+      };
+    };
+
+    return serialize(rootNode, maxDepth).node;
   }
 
   readNote(requestedPath, maxChars) {

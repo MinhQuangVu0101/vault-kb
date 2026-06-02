@@ -60,6 +60,14 @@ const ingestResult = await client.callTool({
   name: "kb_ingest",
   arguments: {},
 });
+const overviewResult = await client.callTool({
+  name: "kb_overview",
+  arguments: {},
+});
+const treeResult = await client.callTool({
+  name: "kb_tree",
+  arguments: { depth: 2 },
+});
 
 console.log(JSON.stringify({
   toolCount: tools.tools.length,
@@ -68,6 +76,8 @@ console.log(JSON.stringify({
   listPreview: extractText(listResult),
   readPreview: extractText(readResult),
   ingestPreview: extractText(ingestResult),
+  overviewPreview: extractText(overviewResult),
+  treePreview: extractText(treeResult),
 }, null, 2));
 
 await client.close();

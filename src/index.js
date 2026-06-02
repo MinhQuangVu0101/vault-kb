@@ -183,7 +183,7 @@ if (args.has("--web")) {
 
 const server = new McpServer({
   name: "quangs-vault-mcp",
-  version: "0.1.0",
+  version: "0.3.0",
 }, {
   capabilities: {
     tools: {},
@@ -192,7 +192,7 @@ const server = new McpServer({
 
 server.registerTool("kb_search", {
   title: "Search vault notes",
-  description: "Search AI-accessible Obsidian notes with SQLite FTS5 keyword search.",
+  description: "Search AI-accessible Obsidian notes with SQLite FTS5 keyword search. For browsing vault structure, prefer kb_overview + kb_tree. Use this for keyword content matches.",
   inputSchema: {
     query: z.string().min(1),
     folder: z.string().min(1).optional(),
@@ -206,7 +206,7 @@ server.registerTool("kb_search", {
 
 server.registerTool("kb_read", {
   title: "Read a note",
-  description: "Read one AI-accessible note by vault-relative path.",
+  description: "Read one AI-accessible note by vault-relative path. Use after kb_search, kb_list, or kb_tree once you have a specific path.",
   inputSchema: {
     path: z.string().min(1),
     maxChars: z.number().int().positive().optional(),
@@ -218,7 +218,7 @@ server.registerTool("kb_read", {
 
 server.registerTool("kb_list", {
   title: "List notes",
-  description: "List AI-accessible notes by folder, tag, or status.",
+  description: "List AI-accessible notes by folder, tag, or status. Use after kb_overview or kb_tree to enumerate notes within a known folder.",
   inputSchema: {
     folder: z.string().min(1).optional(),
     tag: z.string().min(1).optional(),
@@ -248,7 +248,7 @@ server.registerTool("kb_ingest", {
 
 server.registerTool("kb_semantic", {
   title: "Semantic search",
-  description: "Embedding-based search via local Ollama. Returns notes ranked by cosine similarity. Requires Ollama running and embeddings populated.",
+  description: "Embedding-based search via local Ollama. Returns notes ranked by cosine similarity. Requires Ollama running and embeddings populated. For browsing vault structure, prefer kb_overview + kb_tree. Use this for meaning-based content matches.",
   inputSchema: {
     query: z.string().min(1),
     folder: z.string().min(1).optional(),
@@ -285,7 +285,7 @@ server.registerTool("kb_suggest_links", {
 
 server.registerTool("kb_related", {
   title: "Related notes",
-  description: "For a given note, return top-N most similar notes regardless of link status. Uses embedding cosine similarity. Lower-friction sibling of kb_suggest_links — no link-graph filtering.",
+  description: "For a given note, return top-N most similar notes regardless of link status. Uses embedding cosine similarity. Lower-friction sibling of kb_suggest_links — no link-graph filtering. Use after you have a specific note path. For discovering vault structure, use kb_tree.",
   inputSchema: {
     path: z.string().min(1),
     limit: z.number().int().min(1).max(20).optional(),
@@ -367,6 +367,26 @@ server.registerTool("kb_bulk_update", {
     for (const { path: p } of result.changes) vaultIndex.ingestOne(p);
   }
   return toolText(JSON.stringify(result, null, 2));
+}));
+
+server.registerTool("kb_overview", {
+  title: "Vault overview",
+  description: "Entry point for vault exploration. Run this first when working in the user's Obsidian vault — returns a one-shot snapshot of total note count, top-level folder breakdown, and recently-touched notes. Use the returned folder paths with kb_tree (drill-in) or kb_list (notes within a folder). No arguments.",
+}, wrapTool("kb_overview", async () => {
+  const ov = vaultIndex.overview();
+  return toolText(JSON.stringify(ov, null, 2));
+}));
+
+server.registerTool("kb_tree", {
+  title: "Folder tree",
+  description: "Return a hierarchical folder tree with note counts per folder. Use after kb_overview to drill into a specific section of the vault. Returns folder structure only — no note titles. For listing notes inside a folder, use kb_list. Defaults to vault root, depth 2.",
+  inputSchema: {
+    path: z.string().optional(),
+    depth: z.number().int().min(0).max(6).optional(),
+  },
+}, wrapTool("kb_tree", async ({ path: treePath, depth }) => {
+  const t = vaultIndex.tree({ path: treePath, depth });
+  return toolText(JSON.stringify(t, null, 2));
 }));
 
 server.registerTool("kb_stats", {

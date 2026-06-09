@@ -1,6 +1,6 @@
 {
   "name": "vault-kb",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Local MCP server that makes opt-in Obsidian notes searchable by AI tools. FTS5 + semantic + link graph, runs entirely on your machine.",
   "type": "module",
   "license": "MIT",

@@ -2,6 +2,12 @@
 
 All notable changes to vault-kb. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## [0.3.1] - 2026-06-09
+
+### Fixed
+- `.stversions` (Syncthing File Versioning) added to the default `hardExcludedFolders`. Without it, enabling Syncthing versioning floods the index with stale snapshot copies that dominate `kb_dead_links` and `kb_orphans` output (141 phantom notes in the author's vault).
+- Folder filters in `kb_list` and `kb_search` now escape SQL LIKE wildcards (`%`, `_`, `\`), so folder names containing them no longer match similarly named siblings. Same fix as `kb_tree` got in 0.3.0; `kb_semantic` already escaped and gained regression coverage.
+
 ## [0.3.0] — 2026-05-23
 
 ### Added
@@ -50,5 +56,6 @@ Initial public release on npm. Captures everything shipped through Phase 1 (Foun
 - Semantic search requires a running Ollama instance and a pulled embedding model (`ollama pull nomic-embed-text`). Without it, keyword + fuzzy search still work.
 - `better-sqlite3` is a native module; first install compiles on systems without a prebuild.
 
+[0.3.1]: https://github.com/MinhQuangVu0101/vault-kb/releases/tag/v0.3.1
 [0.3.0]: https://github.com/MinhQuangVu0101/vault-kb/releases/tag/v0.3.0
 [0.2.0]: https://github.com/MinhQuangVu0101/vault-kb/releases/tag/v0.2.0

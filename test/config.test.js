@@ -73,3 +73,20 @@ test("loadConfig errors when vault path does not exist", () => {
     /Vault root does not exist/,
   );
 });
+
+test("loadConfig default hardExcludedFolders include Syncthing versioning", () => {
+  const dir = tmpdir();
+  const vault = path.join(dir, "vault");
+  fs.mkdirSync(vault);
+  const cfg = loadConfig(path.join(dir, "no-such-config.json"), {
+    env: { VAULT_KB_VAULT_PATH: vault },
+  });
+  assert.deepEqual(cfg.hardExcludedFolders, [
+    ".obsidian",
+    ".obsidian-mobile",
+    ".git",
+    ".stversions",
+    ".trash",
+  ]);
+  assert.ok(cfg.hardExcludedFoldersLower.includes(".stversions"));
+});

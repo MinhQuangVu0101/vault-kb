@@ -11,6 +11,7 @@ const configSchema = z.object({
     ".obsidian",
     ".obsidian-mobile",
     ".git",
+    ".stversions",
     ".trash",
   ]),
   defaultLimits: z.object({

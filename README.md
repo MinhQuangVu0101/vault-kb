@@ -28,7 +28,7 @@ Captured against the bundled demo vault (`test/fixture/demo-vault/`) — 8 notes
 ## Privacy model
 
 - Only notes with `ai-access: true` in frontmatter are indexed.
-- Folders in `hardExcludedFolders` are never touched (defaults: `.obsidian`, `.obsidian-mobile`, `.git`, `.trash`).
+- Folders in `hardExcludedFolders` are never touched (defaults: `.obsidian`, `.obsidian-mobile`, `.git`, `.stversions`, `.trash`).
 - The MCP server is read-mostly: write tools (`kb_bulk_update`) require explicit `apply: true` and always produce a revert bundle.
 - The SQLite index is local — no network calls except optional Ollama on `127.0.0.1`.
 - The web UI loads Inter Variable from Google Fonts (cached after first load). Replace the `@import` in `public/style.css` to use a system font or self-host if you'd rather not.
@@ -60,7 +60,7 @@ setx VAULT_KB_VAULT_PATH "C:\Users\YOU\Documents\obsidian-vault"
 ```json
 {
   "vaultRoot": "/absolute/path/to/your/vault",
-  "hardExcludedFolders": [".obsidian", ".obsidian-mobile", ".git", ".trash"]
+  "hardExcludedFolders": [".obsidian", ".obsidian-mobile", ".git", ".stversions", ".trash"]
 }
 ```
 

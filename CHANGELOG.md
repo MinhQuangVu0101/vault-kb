@@ -2,6 +2,12 @@
 
 All notable changes to vault-kb. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- `kb_tree` now normalizes folder paths the same way as the other path-based tools (`normalizeRelativeVaultPath`), so backslash (`10 Projects\Sub`), `./`-prefixed, and duplicate-separator paths resolve to the correct subtree instead of returning empty results. It also rejects `..` traversal consistently.
+- The shared path normalizer now strips trailing slashes. This fixes a latent case where `kb_list`, `kb_search`, and `kb_semantic` returned no results for a folder argument with a trailing slash (e.g. `10 Projects/`).
+
 ## [0.3.1] - 2026-06-09
 
 ### Fixed

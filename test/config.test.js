@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { loadConfig, resolveVaultRoot } from "../src/config.js";
+import { loadConfig, resolveVaultRoot, normalizeRelativeVaultPath } from "../src/config.js";
 
 function tmpdir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-config-"));
@@ -72,6 +72,24 @@ test("loadConfig errors when vault path does not exist", () => {
     }),
     /Vault root does not exist/,
   );
+});
+
+test("normalizeRelativeVaultPath canonicalizes folder forms identically", () => {
+  // The canonical form every path-based tool (list/search/semantic/tree) must agree on.
+  assert.equal(normalizeRelativeVaultPath("10 Projects/Sub"), "10 Projects/Sub");
+  assert.equal(normalizeRelativeVaultPath("10 Projects/Sub/"), "10 Projects/Sub", "trailing slash stripped");
+  assert.equal(normalizeRelativeVaultPath("10 Projects\\Sub"), "10 Projects/Sub", "backslashes -> /");
+  assert.equal(normalizeRelativeVaultPath("./10 Projects/Sub"), "10 Projects/Sub", "leading ./ removed");
+  assert.equal(normalizeRelativeVaultPath("10 Projects//Sub"), "10 Projects/Sub", "duplicate separators collapsed");
+  assert.equal(normalizeRelativeVaultPath("  10 Projects/Sub  "), "10 Projects/Sub", "whitespace trimmed");
+  assert.equal(normalizeRelativeVaultPath("/10 Projects/"), "10 Projects", "leading and trailing slashes");
+  assert.equal(normalizeRelativeVaultPath(""), "", "empty -> root");
+  assert.equal(normalizeRelativeVaultPath(undefined), "", "undefined -> root");
+});
+
+test("normalizeRelativeVaultPath rejects parent traversal", () => {
+  assert.throws(() => normalizeRelativeVaultPath("../escape"), /escapes vault root/i);
+  assert.throws(() => normalizeRelativeVaultPath(".."), /escapes vault root/i);
 });
 
 test("loadConfig default hardExcludedFolders include Syncthing versioning", () => {

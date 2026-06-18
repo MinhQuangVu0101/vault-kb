@@ -865,8 +865,11 @@ export class VaultIndex {
   tree({ path: rootPath, depth } = {}) {
     this.ensureIndexed();
 
+    // Use the same normalization as list()/search()/semanticSearch() so kb_tree
+    // accepts the same folder forms (backslashes, ./, duplicate separators) and
+    // rejects parent traversal consistently, instead of silently returning empty.
     const normalizedRoot = typeof rootPath === "string"
-      ? rootPath.replace(/^\/+/, "").replace(/\/+$/, "")
+      ? normalizeRelativeVaultPath(rootPath)
       : "";
     const maxDepth = Number.isInteger(depth) ? Math.min(Math.max(depth, 0), 6) : 2;
 

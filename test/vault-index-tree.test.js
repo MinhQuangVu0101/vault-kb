@@ -147,6 +147,28 @@ test("tree: path normalization — trailing slash treated same as no slash", () 
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test("tree: path normalization — backslashes, ./ prefix and duplicate separators match canonical form (consistent with kb_list/kb_search)", () => {
+  const { root } = makeTempVault();
+  const vi = new VaultIndex(mkConfig(root));
+  vi.ingest();
+
+  const canonical = vi.tree({ path: "10 Projects/Sub" });
+  assert.equal(canonical.noteCount, 2, "sanity: canonical form resolves the subtree");
+
+  // All of these are accepted by normalizeRelativeVaultPath() in the other tools,
+  // so kb_tree must resolve them to the same subtree instead of returning empty.
+  assert.deepEqual(vi.tree({ path: "10 Projects\\Sub" }), canonical, "Windows-style backslash path");
+  assert.deepEqual(vi.tree({ path: "./10 Projects/Sub" }), canonical, "leading ./ prefix");
+  assert.deepEqual(vi.tree({ path: "10 Projects//Sub" }), canonical, "duplicate separators");
+  assert.deepEqual(vi.tree({ path: "  10 Projects/Sub  " }), canonical, "surrounding whitespace");
+
+  // And the .. escape guard must behave like the other path-based tools (throw, not return empty).
+  assert.throws(() => vi.tree({ path: "../escape" }), /escapes vault root/i, "rejects parent traversal");
+
+  vi.close();
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test("tree: LIKE special characters in folder names do not over-match siblings", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-tree-like-"));
   const writeNote = (rel, body) => {

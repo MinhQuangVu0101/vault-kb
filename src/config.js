@@ -40,7 +40,11 @@ function toPosixPath(value) {
 }
 
 export function normalizeRelativeVaultPath(value) {
-  const normalized = path.posix.normalize(toPosixPath(String(value ?? "")).trim().replace(/^\/+/, ""));
+  // Trailing slashes are not meaningful for a vault-relative path; strip them so
+  // "10 Projects/" and "10 Projects" canonicalize identically across all tools.
+  const normalized = path.posix
+    .normalize(toPosixPath(String(value ?? "")).trim().replace(/^\/+/, ""))
+    .replace(/\/+$/, "");
   if (!normalized || normalized === ".") {
     return "";
   }

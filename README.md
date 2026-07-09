@@ -22,7 +22,7 @@ Captured against the bundled demo vault (`test/fixture/demo-vault/`) — 8 notes
 - **Keyword search** (SQLite FTS5, BM25 ranking), **fuzzy search** (trigram fallback), and **semantic search** (local Ollama embeddings).
 - **Link-graph awareness:** backlinks, outlinks, related notes, orphan detection, dead-link detection.
 - **Bulk frontmatter edits** with dry-run + automatic revert bundles.
-- **File watcher:** edits in Obsidian re-index incrementally within ~300 ms.
+- **File watcher:** edits in Obsidian re-index incrementally within ~300 ms. The watcher starts on the first tool call (idle sessions keep no vault file handles open); edits made before that are caught up by a one-shot re-index.
 - **Optional local web UI** at `http://127.0.0.1:7345`.
 
 ## Privacy model

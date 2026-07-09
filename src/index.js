@@ -90,6 +90,7 @@ function wrapTool(name, handler) {
   return async (args) => {
     stats.recordToolCall(name);
     logger.info({ event: "tool_call", tool: name, args });
+    ensureWatcherStarted();
     const t0 = Date.now();
     try {
       const result = await handler(args);
@@ -148,10 +149,29 @@ if (embedder) {
 }
 
 const watcher = args.has("--no-watcher") ? null : createWatcher({ config, vaultIndex, logger, stats });
-watcher?.start();
+let lastIngestAt = Date.now();
+const CATCHUP_INGEST_MS = 60_000;
+
+// Watching the vault costs one open fd per file on macOS (chokidar without
+// fsevents falls back to kqueue), so idle MCP sessions must not hold a
+// watcher. Start it on first tool use; re-ingest first if the index may have
+// gone stale since startup.
+function ensureWatcherStarted() {
+  if (!watcher || watcher.snapshot().active) return;
+  try {
+    if (Date.now() - lastIngestAt > CATCHUP_INGEST_MS) {
+      vaultIndex.ingest();
+      lastIngestAt = Date.now();
+    }
+    watcher.start();
+  } catch (err) {
+    logger.error({ event: "watcher_lazy_start_error", error: String(err?.message ?? err) });
+  }
+}
 
 let web = null;
 if (args.has("--web")) {
+  ensureWatcherStarted();
   web = createWebServer({
     vaultIndex,
     embedder,
@@ -411,14 +431,33 @@ server.registerTool("kb_stats", {
 
 const transport = new StdioServerTransport();
 
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, async () => {
+let shuttingDown = false;
+async function shutdown(reason) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ event: "shutdown", reason });
+  // If cleanup hangs we still must die; a lingering server leaks vault fds.
+  const failsafe = setTimeout(() => process.exit(0), 2_000);
+  failsafe.unref();
+  try {
     await watcher?.stop();
     await web?.stop();
     await server.close();
     vaultIndex.close();
-    process.exit(0);
-  });
+  } catch (err) {
+    logger.error({ event: "shutdown_error", error: String(err?.message ?? err) });
+  }
+  process.exit(0);
 }
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => shutdown(signal));
+}
+
+// MCP stdio convention: when the client process dies, our stdin hits EOF.
+// Without this the server survives every crashed or killed session as an
+// orphan (PPID 1) holding the vault watcher's file descriptors open.
+process.stdin.on("end", () => shutdown("stdin_end"));
+process.stdin.on("close", () => shutdown("stdin_close"));
 
 await server.connect(transport);

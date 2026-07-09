@@ -2,6 +2,14 @@
 
 All notable changes to vault-kb. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- The server now exits when stdin reaches EOF, i.e. when the MCP client process dies (MCP stdio convention). Previously every crashed or hard-killed Claude/Codex session left an orphaned server behind (PPID 1) that kept running for days; each orphan held ~1600 open file descriptors through the vault watcher, and enough of them exhausted the macOS global file table (ENFILE, `kern.num_files` at the `kern.maxfiles` ceiling). SIGINT/SIGTERM shutdown now shares the same idempotent path and force-exits after 2 s if cleanup hangs.
+
+### Changed
+- The vault watcher starts lazily on the first tool call instead of at server startup. chokidar without fsevents holds one open file descriptor per watched file on macOS, so an idle MCP session dropped from ~1600 open fds to ~47. If the first tool call arrives more than 60 s after startup, the index is refreshed once before the watcher takes over, so no edits are missed. `--web` mode still starts the watcher immediately.
+
 ## [0.3.2] - 2026-06-19
 
 ### Fixed

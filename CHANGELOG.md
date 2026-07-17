@@ -9,6 +9,10 @@ All notable changes to vault-kb. Format follows [Keep a Changelog](https://keepa
 
 ### Changed
 - The vault watcher starts lazily on the first tool call instead of at server startup. chokidar without fsevents holds one open file descriptor per watched file on macOS, so an idle MCP session dropped from ~1600 open fds to ~47. If the first tool call arrives more than 60 s after startup, the index is refreshed once before the watcher takes over, so no edits are missed. `--web` mode still starts the watcher immediately.
+- CI and `prepublishOnly` now run a TypeScript `checkJs` pass (`npm run typecheck`) over `src/` and `scripts/`. Stale JSDoc option types across several modules were corrected in the process; no runtime behavior change.
+
+### Security
+- Bumped transitive dependencies via `npm audit fix` (hono, @hono/node-server, fast-uri, ip-address, express-rate-limit, js-yaml, qs), clearing 7 advisories (2 high). Lockfile-only change.
 
 ## [0.3.2] - 2026-06-19
 

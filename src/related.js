@@ -2,6 +2,7 @@ const DEFAULT_LIMIT = 5;
 const DEFAULT_MIN_SCORE = 0;
 const CANDIDATE_MULTIPLIER = 3;
 
+/** @param {{ vaultIndex?: any, path?: string, limit?: number, minScore?: number }} [opts] */
 export async function relatedNotes({
   vaultIndex,
   path,

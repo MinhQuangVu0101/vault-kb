@@ -576,6 +576,7 @@ export class VaultIndex {
     return this.countEmbeddingsStmt.get()?.c ?? 0;
   }
 
+  /** @param {{ query?: string, folder?: string, tag?: string, limit?: number }} opts */
   async semanticSearch({ query, folder, tag, limit = 8 }) {
     if (!this.embedder) throw new Error("Embedder not configured.");
     if (!query || !String(query).trim()) throw new Error("Query is empty.");
@@ -745,6 +746,7 @@ export class VaultIndex {
     return row?.value ?? null;
   }
 
+  /** @param {{ query?: string, folder?: string, tag?: string, limit?: number }} opts */
   search({ query, folder, tag, limit }) {
     this.ensureIndexed();
 
@@ -862,6 +864,7 @@ export class VaultIndex {
     };
   }
 
+  /** @param {{ path?: string, depth?: number }} [opts] */
   tree({ path: rootPath, depth } = {}) {
     this.ensureIndexed();
 

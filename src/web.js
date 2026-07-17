@@ -41,6 +41,7 @@ function serveStatic(req, res) {
   });
 }
 
+/** @param {{ vaultIndex?: any, embedder?: any, statsSource?: any, logger?: any, port?: number, host?: string }} [opts] */
 export function createWebServer({
   vaultIndex,
   embedder = null,
@@ -238,7 +239,7 @@ export function createWebServer({
   function start() {
     return new Promise((resolve) => {
       server.listen(port, host, () => {
-        const actual = server.address();
+        const actual = /** @type {import("node:net").AddressInfo} */ (server.address());
         logger?.info({ event: "web_started", url: `http://${host}:${actual.port}` });
         resolve({ host, port: actual.port });
       });
@@ -246,7 +247,7 @@ export function createWebServer({
   }
 
   function stop() {
-    return new Promise((resolve) => server.close(() => resolve()));
+    return new Promise((resolve) => server.close(() => resolve(undefined)));
   }
 
   return { start, stop, server, host, port };

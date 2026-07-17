@@ -67,6 +67,7 @@ function normalizeFolderPrefix(value) {
 const defaultConfigPath = fileURLToPath(new URL("../vault-ai.config.json", import.meta.url));
 const VAULT_PATH_ENV = "VAULT_KB_VAULT_PATH";
 
+/** @param {{ env?: NodeJS.ProcessEnv, configVaultRoot?: any, configPath?: string | null }} [opts] */
 export function resolveVaultRoot({ env = process.env, configVaultRoot, configPath } = {}) {
   const fromEnv = env[VAULT_PATH_ENV];
   if (fromEnv && fromEnv.trim()) {

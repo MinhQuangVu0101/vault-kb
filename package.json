@@ -43,9 +43,10 @@
     "inspect-config": "node src/index.js --print-config",
     "smoke": "node src/smoke.js",
     "test": "node --test",
+    "typecheck": "tsc -p jsconfig.json",
     "regression": "node scripts/regression-harness.js",
     "bulk": "node scripts/bulk.js",
-    "prepublishOnly": "npm test"
+    "prepublishOnly": "npm run typecheck && npm test"
   },
   "engines": {
     "node": ">=20"
@@ -57,5 +58,9 @@
     "fast-glob": "^3.3.3",
     "gray-matter": "^4.0.3",
     "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
   }
 }

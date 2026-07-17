@@ -98,6 +98,15 @@ function writeRevertBundle(entries) {
   return file;
 }
 
+/**
+ * @param {{
+ *   config?: any,
+ *   match?: { paths?: string[], folder?: string, tag?: string, frontmatter?: Record<string, any> },
+ *   ops?: { addTags?: string[], removeTags?: string[], setFields?: Record<string, any>, unsetFields?: string[], setAccess?: boolean },
+ *   apply?: boolean,
+ *   logger?: any,
+ * }} [opts]
+ */
 export function runBulkUpdate({ config, match = {}, ops = {}, apply = false, logger = null } = {}) {
   const hasOp = Boolean(
     ops.addTags?.length

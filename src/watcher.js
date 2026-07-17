@@ -4,6 +4,7 @@ import chokidar from "chokidar";
 
 const DEBOUNCE_MS = 300;
 
+/** @param {{ config?: any, vaultIndex?: any, logger?: any, stats?: any, debounceMs?: number }} [opts] */
 export function createWatcher({ config, vaultIndex, logger, stats, debounceMs = DEBOUNCE_MS } = {}) {
   const events = { add: 0, change: 0, unlink: 0, error: 0 };
   const pending = new Map();

@@ -36,7 +36,7 @@ export function createEmbedder({
     if (!res.ok) {
       throw new Error(`ollama ${res.status}: ${await res.text()}`);
     }
-    const json = await res.json();
+    const json = /** @type {{ embedding?: number[] }} */ (await res.json());
     if (!Array.isArray(json.embedding)) {
       throw new Error("ollama response missing embedding array");
     }
@@ -84,7 +84,7 @@ export function createEmbedder({
         logger?.warn({ event: "summarize_failed", status: res.status });
         return null;
       }
-      const json = await res.json();
+      const json = /** @type {{ response?: string }} */ (await res.json());
       const text = typeof json.response === "string" ? json.response.trim() : null;
       return text || null;
     } catch (err) {

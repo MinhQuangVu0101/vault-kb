@@ -27,6 +27,7 @@ export function createStats() {
     };
   }
 
+  /** @param {{ tool?: string, path?: string, message?: any, code?: string }} entry */
   function pushError({ tool, path: p, message, code }) {
     state.recentErrors.unshift({
       ts: new Date().toISOString(),

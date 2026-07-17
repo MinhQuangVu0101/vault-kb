@@ -22,6 +22,7 @@ function trimExcerpt(text, max = EXCERPT_CHARS) {
   return t.length > max ? t.slice(0, max) + "…" : t;
 }
 
+/** @param {{ vaultIndex?: any, embedder?: any, path?: string, limit?: number, minScore?: number }} [opts] */
 export async function suggestLinks({
   vaultIndex,
   embedder,

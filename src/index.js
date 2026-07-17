@@ -129,11 +129,11 @@ if (embedder) {
       logger.info({ event: "ollama_health_ok", model: r.resolvedModel });
     } else if (r.code === "MODEL_MISSING") {
       const base = r.requestedModel.split(":")[0];
-      console.error(`[vault-mcp] WARN: Ollama reachable but model '${base}' not installed — run: ollama pull ${base}`);
+      console.error(`[vault-mcp] WARN: Ollama reachable but model '${base}' not installed - run: ollama pull ${base}`);
       logger.warn({ event: "ollama_model_missing", model: base, available: r.availableModels });
     } else {
       const { url } = embedder.status();
-      console.error(`[vault-mcp] WARN: Ollama unreachable at ${url} (${r.message}) — run: ollama serve`);
+      console.error(`[vault-mcp] WARN: Ollama unreachable at ${url} (${r.message}) - run: ollama serve`);
       logger.warn({ event: "ollama_unreachable", url, error: r.message });
     }
   }).catch((err) => {

@@ -204,6 +204,137 @@ export function listBundles(revertDir = REVERT_DIR) {
   return bundles;
 }
 
+const BUNDLE_ID_RE = /^[0-9TZ-]+$/;
+
+/**
+ * @param {{
+ *   config?: any,
+ *   bundleId?: string,
+ *   apply?: boolean,
+ *   force?: boolean,
+ *   revertDir?: string,
+ *   logger?: any,
+ * }} [opts]
+ */
+export function runBulkRevert({ config, bundleId, apply = false, force = false, revertDir = undefined, logger = null } = {}) {
+  const vaultRoot = config.vaultRoot;
+  const dir = revertDir ?? REVERT_DIR;
+  const all = listBundles(dir);
+  const forVault = all.filter((b) => b.schema === 2 && b.vaultRoot === vaultRoot && !b.corrupt);
+  const availableBundles = forVault.map((b) => ({ id: b.id, createdAt: b.createdAt, notes: b.notes }));
+
+  if (bundleId !== undefined && bundleId !== null) {
+    if (!BUNDLE_ID_RE.test(String(bundleId))) {
+      throw new Error(`Invalid bundleId: ${bundleId}`);
+    }
+  }
+
+  // Select the bundle: search enumerated basenames, never build a path from input.
+  let chosen;
+  if (bundleId) {
+    chosen = all.find((b) => b.id === String(bundleId));
+    if (!chosen) throw new Error(`No revert bundle with id ${bundleId}`);
+  } else {
+    if (forVault.length === 0) {
+      return {
+        applied: false, bundleId: null, vaultMatch: true, driftCheck: "available",
+        willRestore: [], drifted: [], missing: [], unreadable: [],
+        availableBundles, message: "No revert bundles for this vault.",
+      };
+    }
+    chosen = forVault[forVault.length - 1]; // newest by ascending id sort
+  }
+
+  let data;
+  try {
+    data = JSON.parse(fs.readFileSync(chosen.file, "utf8"));
+  } catch (err) {
+    throw new Error(`Revert bundle ${chosen.id} is unreadable: ${String(err?.message ?? err)}`);
+  }
+  if (!Array.isArray(data.entries)) throw new Error(`Revert bundle ${chosen.id} has no entries`);
+
+  const driftCheck = data.entries.every((e) => e && typeof e === "object" && "after" in e)
+    ? "available" : "unavailable";
+  const bundleVaultRoot = typeof data.vaultRoot === "string" ? data.vaultRoot : null;
+  const vaultMatch = bundleVaultRoot === null ? null : bundleVaultRoot === vaultRoot;
+
+  const willRestore = [];
+  const drifted = [];
+  const missing = [];
+  const unreadable = [];
+  const restorePlans = []; // { abs, rel, current, nextData, content }
+
+  for (const entry of data.entries) {
+    const rawRel = entry && entry.path;
+    let safeRel;
+    try {
+      safeRel = normalizeRelativeVaultPath(rawRel);
+    } catch {
+      unreadable.push({ path: String(rawRel), error: "path escapes vault root" });
+      continue;
+    }
+    const abs = path.resolve(vaultRoot, ...safeRel.split("/"));
+    const rootResolved = path.resolve(vaultRoot);
+    if (abs !== rootResolved && !abs.startsWith(rootResolved + path.sep)) {
+      unreadable.push({ path: safeRel, error: "path escapes vault root" });
+      continue;
+    }
+    if (!fs.existsSync(abs)) { missing.push(safeRel); continue; }
+
+    let parsed;
+    try {
+      parsed = matter(fs.readFileSync(abs, "utf8"));
+    } catch (err) {
+      unreadable.push({ path: safeRel, error: String(err?.message ?? err) });
+      continue;
+    }
+    const current = parsed.data ?? {};
+    const before = entry.frontmatter ?? {};
+    const hasAfter = "after" in entry;
+    const after = hasAfter ? (entry.after ?? {}) : null;
+
+    let K;
+    let next;
+    let driftedKeys = [];
+    if (hasAfter) {
+      K = changedKeys(before, after);
+      driftedKeys = K.filter((k) => stableStringify(current[k]) !== stableStringify(after[k]));
+      next = { ...current };
+      for (const k of K) {
+        if (k in before) next[k] = before[k];
+        else delete next[k];
+      }
+    } else {
+      // v1 blind restore: replace the whole frontmatter with the recorded before.
+      next = { ...before };
+      K = changedKeys(current, next);
+    }
+
+    if (driftedKeys.length > 0) {
+      drifted.push({ path: safeRel, keys: driftedKeys });
+      if (!force) continue;
+    }
+
+    const diff = {};
+    for (const k of K) {
+      const a = current[k];
+      const b = k in next ? next[k] : undefined;
+      if (stableStringify(a) !== stableStringify(b)) {
+        diff[k] = { before: a ?? null, after: b ?? null };
+      }
+    }
+    if (Object.keys(diff).length === 0) continue;
+    willRestore.push({ path: safeRel, diff });
+    restorePlans.push({ abs, rel: safeRel, current, nextData: next, content: parsed.content });
+  }
+
+  const view = {
+    applied: false, bundleId: chosen.id, vaultMatch, driftCheck,
+    willRestore, drifted, missing, unreadable, availableBundles,
+  };
+  return view;
+}
+
 /**
  * @param {{
  *   config?: any,

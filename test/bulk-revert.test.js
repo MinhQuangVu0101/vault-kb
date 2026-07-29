@@ -7,7 +7,7 @@ import path from "node:path";
 import matter from "gray-matter";
 
 import { stableStringify, changedKeys } from "../src/bulk.js";
-import { runBulkUpdate, nextRevertId, listBundles } from "../src/bulk.js";
+import { runBulkUpdate, nextRevertId, listBundles, runBulkRevert } from "../src/bulk.js";
 
 function tmpDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -136,4 +136,118 @@ test("listBundles reports a legacy v1 bundle as schema 1", () => {
   assert.equal(entry.createdAt, null);
   assert.equal(entry.notes, 1);
   assert.equal(entry.corrupt, undefined);
+});
+
+function bulkThenSetup(fm, ops) {
+  const v = tmpDir("vault-kb-rev-");
+  const reverts = tmpDir("vault-kb-rev-store-");
+  writeNote(v, "a.md", fm);
+  const up = runBulkUpdate({ config: mkConfig(v), match: {}, ops, apply: true, revertDir: reverts });
+  return { v, reverts, up };
+}
+
+test("dry-run previews a field-level restore without writing", () => {
+  const { v, reverts } = bulkThenSetup({ status: "draft", area: "health" }, { setFields: { status: "archived" } });
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.equal(res.applied, false);
+  assert.equal(res.driftCheck, "available");
+  assert.equal(res.willRestore.length, 1);
+  assert.equal(res.willRestore[0].path, "a.md");
+  assert.deepEqual(res.willRestore[0].diff.status, { before: "archived", after: "draft" });
+  assert.equal(matter(fs.readFileSync(path.join(v, "a.md"), "utf8")).data.status, "archived"); // unchanged
+});
+
+test("dry-run flags drift on a bulk-changed key and excludes it from willRestore", () => {
+  const { v, reverts } = bulkThenSetup({ status: "draft" }, { setFields: { status: "archived" } });
+  // Change the same key after the bulk edit:
+  writeNote(v, "a.md", { status: "in-progress" });
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.equal(res.drifted.length, 1);
+  assert.deepEqual(res.drifted[0].keys, ["status"]);
+  assert.equal(res.willRestore.length, 0);
+});
+
+test("dry-run with force includes drifted notes in willRestore", () => {
+  const { v, reverts } = bulkThenSetup({ status: "draft" }, { setFields: { status: "archived" } });
+  writeNote(v, "a.md", { status: "in-progress" });
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts, force: true });
+  assert.equal(res.drifted.length, 1);
+  assert.equal(res.willRestore.length, 1);
+});
+
+test("dry-run reports a missing note", () => {
+  const { v, reverts } = bulkThenSetup({ status: "draft" }, { setFields: { status: "archived" } });
+  fs.rmSync(path.join(v, "a.md"));
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.deepEqual(res.missing, ["a.md"]);
+  assert.equal(res.willRestore.length, 0);
+});
+
+test("empty case: no bundles for this vault returns a message, no throw", () => {
+  const v = tmpDir("vault-kb-empty-");
+  const reverts = tmpDir("vault-kb-empty-store-");
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.equal(res.applied, false);
+  assert.deepEqual(res.availableBundles, []);
+  assert.ok(res.message);
+});
+
+test("invalid bundleId throws", () => {
+  const v = tmpDir("vault-kb-badid-");
+  const reverts = tmpDir("vault-kb-badid-store-");
+  assert.throws(() => runBulkRevert({ config: mkConfig(v), revertDir: reverts, bundleId: "../etc" }), /Invalid bundleId/);
+});
+
+test("field-level restore preserves a later edit to an untouched key (preview)", () => {
+  const { v, reverts } = bulkThenSetup({ status: "draft", area: "health" }, { setFields: { status: "archived" } });
+  // Edit a DIFFERENT key after the bulk op:
+  writeNote(v, "a.md", { status: "archived", area: "fitness" });
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  // status is restorable, area is untouched by revert and not flagged as drift:
+  assert.equal(res.willRestore.length, 1);
+  assert.ok(!("area" in res.willRestore[0].diff));
+  assert.equal(res.drifted.length, 0);
+});
+
+test("dry-run reports an unreadable note instead of throwing", () => {
+  const { v, reverts } = bulkThenSetup({ status: "draft" }, { setFields: { status: "archived" } });
+  // Corrupt the note's frontmatter so gray-matter fails to parse it:
+  fs.writeFileSync(path.join(v, "a.md"), "---\nfoo: [unclosed\n---\nbody\n");
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.equal(res.unreadable.length, 1);
+  assert.equal(res.unreadable[0].path, "a.md");
+  assert.equal(res.willRestore.length, 0);
+});
+
+test("dry-run rejects a bundle entry whose path escapes the vault", () => {
+  const v = tmpDir("vault-kb-escape-");
+  const reverts = tmpDir("vault-kb-escape-store-");
+  // Hand-write a v2 bundle with a traversal path:
+  fs.writeFileSync(path.join(reverts, "revert-2026-01-01T00-00-00-000Z.json"),
+    JSON.stringify({ schema: 2, id: "2026-01-01T00-00-00-000Z", createdAt: "2026-01-01T00:00:00.000Z", vaultRoot: v,
+      entries: [{ path: "../evil.md", frontmatter: { x: 1 }, after: { x: 2 } }] }));
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.equal(res.unreadable.length, 1);
+  assert.match(res.unreadable[0].error, /escapes vault root/);
+  assert.equal(res.willRestore.length, 0);
+});
+
+test("default selects newest bundle; bundleId targets an older one", () => {
+  const v = tmpDir("vault-kb-pick-");
+  const reverts = tmpDir("vault-kb-pick-store-");
+  writeNote(v, "a.md", {});
+  // Two edits touching DIFFERENT keys, so reverting the older one is not drift:
+  const up1 = runBulkUpdate({ config: mkConfig(v), match: {}, ops: { setFields: { a: "1" } }, apply: true, revertDir: reverts });
+  const up2 = runBulkUpdate({ config: mkConfig(v), match: {}, ops: { setFields: { b: "1" } }, apply: true, revertDir: reverts });
+  const oldId = JSON.parse(fs.readFileSync(up1.revertFile, "utf8")).id;
+  const newId = JSON.parse(fs.readFileSync(up2.revertFile, "utf8")).id;
+  assert.notEqual(oldId, newId);
+  // Default picks the newest bundle (undoes the `b` edit):
+  const dflt = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.equal(dflt.bundleId, newId);
+  assert.ok("b" in dflt.willRestore[0].diff);
+  // Explicit older id undoes the `a` edit instead:
+  const older = runBulkRevert({ config: mkConfig(v), revertDir: reverts, bundleId: oldId });
+  assert.equal(older.bundleId, oldId);
+  assert.ok("a" in older.willRestore[0].diff);
 });

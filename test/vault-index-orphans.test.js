@@ -64,3 +64,21 @@ test("findOrphans: respects limit param", () => {
   vi.close();
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("findOrphans: NFD-named note linked via NFC wikilink is not an orphan", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-orphans-"));
+  const write = (rel, body) => fs.writeFileSync(path.join(root, rel), body);
+  // Target file NFD-decomposed on disk (macOS), the wikilink in Hub.md is NFC.
+  write("U\u0308bersicht.md", "---\nai-access: true\ntitle: Uebersicht\n---\nNo outlinks.");
+  write("Hub.md", "---\nai-access: true\ntitle: Hub\n---\nSee [[\u00dcbersicht]].");
+  write("Lonely.md", "---\nai-access: true\ntitle: Lonely\n---\nTruly isolated.");
+
+  const vi = new VaultIndex(mkConfig(root));
+  vi.ingest();
+
+  const orphans = vi.findOrphans();
+  assert.deepEqual(orphans.map((o) => o.title), ["Lonely"]);
+
+  vi.close();
+  fs.rmSync(root, { recursive: true, force: true });
+});

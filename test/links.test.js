@@ -54,6 +54,21 @@ test("buildResolver: case insensitive", () => {
   assert.equal(resolve("FOO"), "Docs/Foo.md");
 });
 
+test("buildResolver: NFC link resolves NFD-encoded path", () => {
+  // macOS stores filenames NFD-decomposed ("o" + combining diaeresis) while
+  // wikilinks are typed NFC (precomposed "\u00f6"). Escapes keep forms explicit.
+  const nfdPath = "10 Personal/Plans/Perso\u0308nliche Todos.md";
+  const resolve = buildResolver([nfdPath]);
+  assert.equal(resolve("Pers\u00f6nliche Todos"), nfdPath);
+  assert.equal(resolve("10 Personal/Plans/Pers\u00f6nliche Todos"), nfdPath);
+});
+
+test("buildResolver: NFD link resolves NFC-encoded path", () => {
+  const nfcPath = "60 Projects/\u00dcbersicht.md";
+  const resolve = buildResolver([nfcPath]);
+  assert.equal(resolve("U\u0308bersicht"), nfcPath);
+});
+
 // Integration: through VaultIndex
 
 function tmpVault() {
@@ -146,6 +161,40 @@ test("search rows include backlinkCount", () => {
   const a = rows.find((r) => r.path === "a.md");
   assert.equal(target.backlinkCount, 1);
   assert.equal(a.backlinkCount, 0);
+
+  index.close();
+});
+
+test("ingestOne: NFC and NFD path variants address the same note row", () => {
+  const v = tmpVault();
+  // File created NFD-decomposed, as macOS filesystems report names.
+  write(v, "Perso\u0308nliche Todos.md", { "ai-access": true }, "todo body");
+
+  const index = new VaultIndex(mkConfig(v));
+  index.ingest();
+  const count = () => index.db.prepare("SELECT COUNT(*) AS c FROM notes").get().c;
+  assert.equal(count(), 1);
+
+  // Re-ingest via the NFC form (as a tool caller would type it): must upsert
+  // the existing row, not create a duplicate under a second key.
+  const result = index.ingestOne("Pers\u00f6nliche Todos.md");
+  assert.equal(result.action, "upserted");
+  assert.equal(count(), 1);
+
+  index.close();
+});
+
+test("readNote: NFC path reads an NFD-named file", () => {
+  const v = tmpVault();
+  write(v, "Perso\u0308nliche Todos.md", { "ai-access": true }, "todo body");
+
+  const index = new VaultIndex(mkConfig(v));
+  index.ingest();
+
+  // Guards the NFD fallback on byte-strict filesystems (Linux CI); on macOS
+  // APFS the primary lookup already succeeds.
+  const note = index.readNote("Pers\u00f6nliche Todos.md");
+  assert.ok(note.rawContent.includes("todo body"));
 
   index.close();
 });

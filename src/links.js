@@ -24,22 +24,27 @@ function stripExt(p) {
   return p.replace(/\.md$/i, "");
 }
 
+// Index paths can be NFD-decomposed (macOS filesystem) while wikilinks are NFC;
+// compare both sides in one canonical form.
+function canon(p) {
+  return p.normalize("NFC").toLowerCase();
+}
+
 export function buildResolver(allPaths) {
   const byFull = new Map();
   const byBasename = new Map();
   for (const p of allPaths) {
-    byFull.set(stripExt(p).toLowerCase(), p);
-    const base = stripExt(path.posix.basename(p)).toLowerCase();
+    byFull.set(canon(stripExt(p)), p);
+    const base = canon(stripExt(path.posix.basename(p)));
     const list = byBasename.get(base) ?? [];
     list.push(p);
     byBasename.set(base, list);
   }
   return function resolve(raw) {
     const norm = raw.replace(/\\/g, "/").replace(/^\/+/, "").trim();
-    const lower = stripExt(norm).toLowerCase();
-    const full = byFull.get(lower);
+    const full = byFull.get(canon(stripExt(norm)));
     if (full) return full;
-    const base = stripExt(path.posix.basename(norm)).toLowerCase();
+    const base = canon(stripExt(path.posix.basename(norm)));
     const candidates = byBasename.get(base);
     if (candidates?.length === 1) return candidates[0];
     if (candidates?.length > 1) return candidates[0];

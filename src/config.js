@@ -42,9 +42,12 @@ function toPosixPath(value) {
 export function normalizeRelativeVaultPath(value) {
   // Trailing slashes are not meaningful for a vault-relative path; strip them so
   // "10 Projects/" and "10 Projects" canonicalize identically across all tools.
+  // NFC because macOS reports filenames NFD-decomposed while wikilinks and tool
+  // inputs are NFC; without one canonical form the same file gets two keys.
   const normalized = path.posix
     .normalize(toPosixPath(String(value ?? "")).trim().replace(/^\/+/, ""))
-    .replace(/\/+$/, "");
+    .replace(/\/+$/, "")
+    .normalize("NFC");
   if (!normalized || normalized === ".") {
     return "";
   }

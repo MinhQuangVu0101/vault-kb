@@ -160,6 +160,12 @@ export class VaultIndex {
       );
       CREATE INDEX IF NOT EXISTS idx_links_source ON links (source);
       CREATE INDEX IF NOT EXISTS idx_links_target ON links (target);
+
+      -- Non-note files (Obsidian .base) that wikilinks may point to. They are
+      -- valid link targets but are never indexed as notes.
+      CREATE TABLE IF NOT EXISTS link_targets (
+        path TEXT PRIMARY KEY
+      );
     `);
   }
 
@@ -249,6 +255,11 @@ export class VaultIndex {
     this.insertLinkStmt = this.db.prepare(
       "INSERT INTO links (source, target, target_raw, unresolved) VALUES (?, ?, ?, ?)",
     );
+    this.clearLinkTargetsStmt = this.db.prepare("DELETE FROM link_targets");
+    this.insertLinkTargetStmt = this.db.prepare(
+      "INSERT OR IGNORE INTO link_targets (path) VALUES (?)",
+    );
+    this.listLinkTargetsStmt = this.db.prepare("SELECT path FROM link_targets");
     this.backlinksStmt = this.db.prepare(`
       SELECT DISTINCT links.source AS path, notes.title
       FROM links JOIN notes ON notes.path = links.source
@@ -322,7 +333,9 @@ export class VaultIndex {
         continue;
       }
 
-      const absolutePath = path.resolve(this.config.vaultRoot, ...relativePath.split("/"));
+      // Read via the glob result, not the NFC-normalized key: on byte-strict
+      // filesystems (Linux) only the on-disk form addresses an NFD-named file.
+      const absolutePath = path.resolve(this.config.vaultRoot, file);
       let note;
       try {
         const stat = fs.statSync(absolutePath);
@@ -345,13 +358,32 @@ export class VaultIndex {
       indexedCount += 1;
     }
 
-    const writeAll = this.db.transaction((items) => {
+    // Obsidian .base files are linkable ([[Freelance.base]]) but not notes;
+    // record their paths so the link resolver knows they exist.
+    const linkTargets = [];
+    const baseFiles = fg.sync("**/*.base", {
+      cwd: this.config.vaultRoot,
+      onlyFiles: true,
+      dot: true,
+      unique: true,
+    });
+    for (const file of baseFiles) {
+      const relativePath = normalizeRelativeVaultPath(file);
+      if (this.isHardExcluded(relativePath)) continue;
+      linkTargets.push(relativePath);
+    }
+
+    const writeAll = this.db.transaction((items, targets) => {
       this.clearFtsStmt.run();
       this.clearNotesStmt.run();
+      this.clearLinkTargetsStmt.run();
 
       for (const item of items) {
         this.insertNoteStmt.run(item);
         this.insertFtsStmt.run(item);
+      }
+      for (const target of targets) {
+        this.insertLinkTargetStmt.run(target);
       }
 
       this.setMetaStmt.run({
@@ -364,7 +396,7 @@ export class VaultIndex {
       });
     });
 
-    writeAll(notes);
+    writeAll(notes, linkTargets);
 
     const prunedEmbeddings = this.pruneOrphanEmbeddings();
     const report = {
@@ -389,7 +421,7 @@ export class VaultIndex {
       return { path: relativePath, action: "skipped", reason: "hardExcluded" };
     }
 
-    const absolutePath = path.resolve(this.config.vaultRoot, ...relativePath.split("/"));
+    const absolutePath = this.resolveExistingVaultPath(relativePath);
     if (!fs.existsSync(absolutePath)) {
       return this.removeOne(relativePath);
     }
@@ -454,7 +486,7 @@ export class VaultIndex {
 
   rebuildAllLinks() {
     const rows = this.db.prepare("SELECT path, body FROM notes").all();
-    const resolver = buildResolver(rows.map((r) => r.path));
+    const resolver = buildResolver(rows.map((r) => r.path).concat(this.linkTargetPaths()));
     const tx = this.db.transaction(() => {
       this.db.prepare("DELETE FROM links").run();
       for (const row of rows) {
@@ -470,8 +502,12 @@ export class VaultIndex {
 
   rebuildLinksForSource(sourcePath, body) {
     const rows = this.db.prepare("SELECT path FROM notes").all();
-    const resolver = buildResolver(rows.map((r) => r.path));
+    const resolver = buildResolver(rows.map((r) => r.path).concat(this.linkTargetPaths()));
     this.replaceLinksForSource(sourcePath, parseLinks(body), resolver);
+  }
+
+  linkTargetPaths() {
+    return this.listLinkTargetsStmt.all().map((r) => r.path);
   }
 
   getBacklinks(targetPath) {
@@ -643,7 +679,7 @@ export class VaultIndex {
   findOrphans({ limit = 50 } = {}) {
     const allPaths = this.db.prepare("SELECT path FROM notes").all().map((r) => r.path);
     if (allPaths.length === 0) return [];
-    const resolve = buildResolver(allPaths);
+    const resolve = buildResolver(allPaths.concat(this.linkTargetPaths()));
 
     const linkedTo = new Set();
     const linkedFrom = new Set();
@@ -678,7 +714,7 @@ export class VaultIndex {
   findDeadLinks({ limit = 50 } = {}) {
     const allPaths = this.db.prepare("SELECT path FROM notes").all().map((r) => r.path);
     if (allPaths.length === 0) return [];
-    const resolve = buildResolver(allPaths);
+    const resolve = buildResolver(allPaths.concat(this.linkTargetPaths()));
 
     const grouped = new Map();
     const rows = this.db.prepare("SELECT path, title, body FROM notes").all();
@@ -942,7 +978,7 @@ export class VaultIndex {
       throw new Error("This note is inside a private excluded area.");
     }
 
-    const absolutePath = this.resolveVaultPath(relativePath);
+    const absolutePath = this.resolveExistingVaultPath(relativePath);
     if (!fs.existsSync(absolutePath)) {
       throw new Error(`Note not found: ${relativePath}`);
     }
@@ -1005,6 +1041,20 @@ export class VaultIndex {
       size_bytes: Buffer.byteLength(rawContent, "utf8"),
       mtime_ms: stat.mtimeMs,
     };
+  }
+
+  // Index keys are NFC while macOS writes filenames NFD. APFS looks both forms
+  // up interchangeably, but byte-strict filesystems (Linux) need the on-disk
+  // form; retry with NFD before treating the file as missing.
+  resolveExistingVaultPath(relativePath) {
+    const primary = this.resolveVaultPath(relativePath);
+    if (fs.existsSync(primary)) return primary;
+    const nfd = relativePath.normalize("NFD");
+    if (nfd !== relativePath) {
+      const alt = this.resolveVaultPath(nfd);
+      if (fs.existsSync(alt)) return alt;
+    }
+    return primary;
   }
 
   resolveVaultPath(relativePath) {

@@ -5,6 +5,8 @@ All notable changes to vault-kb. Format follows [Keep a Changelog](https://keepa
 ## [Unreleased]
 
 ### Fixed
+- Wikilinks and filenames are now compared in one Unicode form (NFC). macOS reports filenames NFD-decomposed while links in note bodies are typed NFC, so every note whose name contains an umlaut or accent was reported as a false positive by `kb_dead_links` (link "broken" although the file exists) and `kb_orphans` (note "orphaned" although it is linked). Index keys are NFC-normalized in `normalizeRelativeVaultPath`, the link resolver canonicalizes both sides, and file access falls back to the NFD form on byte-strict filesystems (Linux).
+- `.base` files (Obsidian Bases) are now valid wikilink targets. `[[Freelance.base]]` no longer shows up as a dead link; ingest records `*.base` paths in a new `link_targets` table (hard-excluded folders stay excluded) that the resolver consults alongside notes. Requires one `kb_ingest` run after updating so the table gets populated.
 - The server now exits when stdin reaches EOF, i.e. when the MCP client process dies (MCP stdio convention). Previously every crashed or hard-killed Claude/Codex session left an orphaned server behind (PPID 1) that kept running for days; each orphan held ~1600 open file descriptors through the vault watcher, and enough of them exhausted the macOS global file table (ENFILE, `kern.num_files` at the `kern.maxfiles` ceiling). SIGINT/SIGTERM shutdown now shares the same idempotent path and force-exits after 2 s if cleanup hangs.
 
 ### Changed

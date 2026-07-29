@@ -58,3 +58,73 @@ test("findDeadLinks: empty result when all links resolve", () => {
   vi.close();
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("findDeadLinks: NFC wikilink to NFD-named file is not dead", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-dead-"));
+  const write = (rel, body) => {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, body);
+  };
+  // File on disk is NFD-decomposed (as macOS reports names), the wikilink NFC.
+  write("Perso\u0308nliche Todos.md", "---\nai-access: true\ntitle: Todos\n---\nBody.");
+  write("Home.md", "---\nai-access: true\ntitle: Home\n---\nSee [[Pers\u00f6nliche Todos]].");
+
+  const vi = new VaultIndex(mkConfig(root));
+  vi.ingest();
+
+  assert.deepEqual(vi.findDeadLinks(), []);
+
+  vi.close();
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("findDeadLinks: [[X.base]] links resolve to existing .base files", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-dead-"));
+  const write = (rel, body) => {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, body);
+  };
+  write("00 System/Bases/Freelance.base", "views: []\n");
+  write("00 System/Bases/Diary.base", "views: []\n");
+  write(
+    "Home.md",
+    "---\nai-access: true\ntitle: Home\n---\n[[Freelance.base]] [[00 System/Bases/Diary.base]] [[Missing.base]]",
+  );
+
+  const vi = new VaultIndex(mkConfig(root));
+  vi.ingest();
+
+  const dead = vi.findDeadLinks();
+  assert.equal(dead.length, 1, "only the missing base is dead");
+  assert.equal(dead[0].path, "Home.md");
+  assert.deepEqual(dead[0].broken, ["Missing.base"]);
+
+  vi.close();
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("findDeadLinks: .base files in hard-excluded folders are not link targets", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-dead-"));
+  const write = (rel, body) => {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, body);
+  };
+  write(".trash/Secret.base", "views: []\n");
+  write("Home.md", "---\nai-access: true\ntitle: Home\n---\n[[Secret.base]]");
+
+  const cfg = mkConfig(root);
+  cfg.hardExcludedFolders = [".trash"];
+  cfg.hardExcludedFoldersLower = [".trash"];
+  const vi = new VaultIndex(cfg);
+  vi.ingest();
+
+  const dead = vi.findDeadLinks();
+  assert.equal(dead.length, 1);
+  assert.deepEqual(dead[0].broken, ["Secret.base"]);
+
+  vi.close();
+  fs.rmSync(root, { recursive: true, force: true });
+});

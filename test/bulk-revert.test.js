@@ -28,3 +28,23 @@ test("changedKeys reports added and removed keys", () => {
   assert.deepEqual(changedKeys({}, { tags: ["x"] }).sort(), ["tags"]);
   assert.deepEqual(changedKeys({ old: 1 }, {}).sort(), ["old"]);
 });
+
+test("stableStringify distinguishes different Date values", () => {
+  const d1 = new Date("2024-01-15");
+  const d2 = new Date("2024-02-20");
+  assert.notEqual(stableStringify(d1), stableStringify(d2));
+});
+
+test("changedKeys detects changes to date-valued fields", () => {
+  const d1 = new Date("2024-01-15");
+  const d2 = new Date("2024-02-20");
+  const before = { created: d1 };
+  const after = { created: d2 };
+  assert.deepEqual(changedKeys(before, after), ["created"]);
+});
+
+test("stableStringify serializes Date identically to its ISO string", () => {
+  const d = new Date("2024-01-15T00:00:00.000Z");
+  const isoString = d.toISOString();
+  assert.equal(stableStringify(d), stableStringify(isoString));
+});

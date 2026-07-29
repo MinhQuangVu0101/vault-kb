@@ -120,12 +120,53 @@ function frontmatterDiff(before, after) {
   return diff;
 }
 
-function writeRevertBundle(entries) {
-  fs.mkdirSync(REVERT_DIR, { recursive: true });
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const file = path.join(REVERT_DIR, `revert-${ts}.json`);
-  fs.writeFileSync(file, JSON.stringify({ ts, entries }, null, 2));
-  return file;
+/**
+ * First `revert-<id>.json` name not already present, suffixing `-1`, `-2`, ...
+ * Pure so the collision path is deterministically testable.
+ * @param {string} revertDir
+ * @param {string} baseId
+ * @param {(file: string) => boolean} [existsFn]
+ * @returns {string}
+ */
+export function nextRevertId(revertDir, baseId, existsFn = (f) => fs.existsSync(f)) {
+  let id = baseId;
+  let counter = 0;
+  while (existsFn(path.join(revertDir, `revert-${id}.json`))) {
+    counter += 1;
+    id = `${baseId}-${counter}`;
+  }
+  return id;
+}
+
+/**
+ * @param {Array<{ path: string, frontmatter: object, after: object }>} entries
+ * @param {{ vaultRoot: string, revertDir?: string }} opts
+ * @returns {string} absolute path to the written bundle
+ */
+function writeRevertBundle(entries, { vaultRoot, revertDir = REVERT_DIR }) {
+  fs.mkdirSync(revertDir, { recursive: true });
+  const createdAt = new Date().toISOString();
+  const baseId = createdAt.replace(/[:.]/g, "-");
+  let id = nextRevertId(revertDir, baseId);
+  for (;;) {
+    const file = path.join(revertDir, `revert-${id}.json`);
+    try {
+      const fd = fs.openSync(file, "wx"); // exclusive: atomic backstop against a race
+      try {
+        const bundle = { schema: 2, id, createdAt, vaultRoot, entries };
+        fs.writeFileSync(fd, JSON.stringify(bundle, null, 2));
+      } finally {
+        fs.closeSync(fd);
+      }
+      return file;
+    } catch (err) {
+      if (err && err.code === "EEXIST") {
+        id = nextRevertId(revertDir, baseId);
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 /**
@@ -135,9 +176,10 @@ function writeRevertBundle(entries) {
  *   ops?: { addTags?: string[], removeTags?: string[], setFields?: Record<string, any>, unsetFields?: string[], setAccess?: boolean },
  *   apply?: boolean,
  *   logger?: any,
+ *   revertDir?: string,
  * }} [opts]
  */
-export function runBulkUpdate({ config, match = {}, ops = {}, apply = false, logger = null } = {}) {
+export function runBulkUpdate({ config, match = {}, ops = {}, apply = false, logger = null, revertDir = undefined } = {}) {
   const hasOp = Boolean(
     ops.addTags?.length
       || ops.removeTags?.length
@@ -196,8 +238,10 @@ export function runBulkUpdate({ config, match = {}, ops = {}, apply = false, log
     };
   }
 
-  const revertEntries = changes.map(({ path: p, before }) => ({ path: p, frontmatter: before }));
-  const revertFile = revertEntries.length ? writeRevertBundle(revertEntries) : null;
+  const revertEntries = changes.map(({ path: p, before, after }) => ({ path: p, frontmatter: before, after }));
+  const revertFile = revertEntries.length
+    ? writeRevertBundle(revertEntries, { vaultRoot: config.vaultRoot, revertDir })
+    : null;
 
   for (const { abs, after, content } of changes) {
     const nextRaw = matter.stringify(content, after);

@@ -1,7 +1,27 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import matter from "gray-matter";
 
 import { stableStringify, changedKeys } from "../src/bulk.js";
+import { runBulkUpdate, nextRevertId } from "../src/bulk.js";
+
+function tmpDir(prefix) {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+function mkConfig(vaultRoot) {
+  return { vaultRoot, hardExcludedFolders: [".obsidian"], hardExcludedFoldersLower: [".obsidian"] };
+}
+
+function writeNote(vaultRoot, rel, fm, body = "body") {
+  const abs = path.join(vaultRoot, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, matter.stringify(body, fm));
+}
 
 test("stableStringify is order-insensitive for object keys", () => {
   assert.equal(stableStringify({ a: 1, b: 2 }), stableStringify({ b: 2, a: 1 }));
@@ -47,4 +67,31 @@ test("stableStringify serializes Date identically to its ISO string", () => {
   const d = new Date("2024-01-15T00:00:00.000Z");
   const isoString = d.toISOString();
   assert.equal(stableStringify(d), stableStringify(isoString));
+});
+
+test("apply writes a schema-2 bundle with id, createdAt, vaultRoot, and after", () => {
+  const v = tmpDir("vault-kb-fmt-");
+  const reverts = tmpDir("vault-kb-reverts-");
+  writeNote(v, "a.md", { "ai-access": true, status: "draft" });
+  const result = runBulkUpdate({
+    config: mkConfig(v),
+    match: {},
+    ops: { setFields: { status: "archived" } },
+    apply: true,
+    revertDir: reverts,
+  });
+  const bundle = JSON.parse(fs.readFileSync(result.revertFile, "utf8"));
+  assert.equal(bundle.schema, 2);
+  assert.equal(bundle.vaultRoot, v);
+  assert.match(bundle.id, /^[0-9TZ-]+$/);
+  assert.ok(bundle.createdAt);
+  assert.equal(bundle.entries[0].frontmatter.status, "draft"); // before
+  assert.equal(bundle.entries[0].after.status, "archived");    // post-edit
+  assert.ok(result.revertFile.startsWith(reverts)); // never touched the real cache
+});
+
+test("nextRevertId suffixes past existing bundle files", () => {
+  const seen = new Set(["/d/revert-ID.json", "/d/revert-ID-1.json"]);
+  assert.equal(nextRevertId("/d", "ID", (f) => seen.has(f)), "ID-2");
+  assert.equal(nextRevertId("/d", "FRESH", () => false), "FRESH");
 });

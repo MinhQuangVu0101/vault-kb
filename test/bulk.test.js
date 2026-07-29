@@ -12,6 +12,10 @@ function tmpVault() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-bulk-"));
 }
 
+function tmpReverts() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-reverts-"));
+}
+
 function mkConfig(vaultRoot) {
   return {
     vaultRoot,
@@ -45,12 +49,14 @@ test("dry-run reports changes without writing", () => {
 
 test("apply writes changes and creates a revert bundle", () => {
   const v = tmpVault();
+  const reverts = fs.mkdtempSync(path.join(os.tmpdir(), "vault-kb-reverts-"));
   write(v, "a.md", { "ai-access": true, status: "draft" });
   const result = runBulkUpdate({
     config: mkConfig(v),
     match: {},
     ops: { setFields: { status: "archived" } },
     apply: true,
+    revertDir: reverts,
   });
   assert.equal(result.applied, true);
   assert.equal(read(v, "a.md").status, "archived");
@@ -62,6 +68,7 @@ test("apply writes changes and creates a revert bundle", () => {
 
 test("folder filter scopes the write", () => {
   const v = tmpVault();
+  const reverts = tmpReverts();
   write(v, "Study/a.md", { status: "draft" });
   write(v, "Other/b.md", { status: "draft" });
   const result = runBulkUpdate({
@@ -69,6 +76,7 @@ test("folder filter scopes the write", () => {
     match: { folder: "Study" },
     ops: { setFields: { status: "done" } },
     apply: true,
+    revertDir: reverts,
   });
   assert.equal(result.matched, 1);
   assert.equal(read(v, "Study/a.md").status, "done");
@@ -77,6 +85,7 @@ test("folder filter scopes the write", () => {
 
 test("tag filter matches notes with tag", () => {
   const v = tmpVault();
+  const reverts = tmpReverts();
   write(v, "a.md", { tags: ["study"] });
   write(v, "b.md", { tags: ["health"] });
   const result = runBulkUpdate({
@@ -84,6 +93,7 @@ test("tag filter matches notes with tag", () => {
     match: { tag: "study" },
     ops: { addTags: ["flagged"] },
     apply: true,
+    revertDir: reverts,
   });
   assert.equal(result.matched, 1);
   assert.deepEqual(read(v, "a.md").tags, ["study", "flagged"]);
@@ -92,12 +102,14 @@ test("tag filter matches notes with tag", () => {
 
 test("addTags / removeTags dedupe and preserve casing-insensitive equality", () => {
   const v = tmpVault();
+  const reverts = tmpReverts();
   write(v, "a.md", { tags: ["Study", "old"] });
   runBulkUpdate({
     config: mkConfig(v),
     match: {},
     ops: { addTags: ["study", "new"], removeTags: ["OLD"] },
     apply: true,
+    revertDir: reverts,
   });
   const tags = read(v, "a.md").tags;
   assert.ok(tags.includes("study"));
@@ -108,24 +120,28 @@ test("addTags / removeTags dedupe and preserve casing-insensitive equality", () 
 
 test("setAccess shortcut writes ai-access", () => {
   const v = tmpVault();
+  const reverts = tmpReverts();
   write(v, "a.md", { tags: [] });
   runBulkUpdate({
     config: mkConfig(v),
     match: {},
     ops: { setAccess: true },
     apply: true,
+    revertDir: reverts,
   });
   assert.equal(read(v, "a.md")["ai-access"], true);
 });
 
 test("unsetFields removes fields", () => {
   const v = tmpVault();
+  const reverts = tmpReverts();
   write(v, "a.md", { status: "draft", obsolete: "yes" });
   runBulkUpdate({
     config: mkConfig(v),
     match: {},
     ops: { unsetFields: ["obsolete"] },
     apply: true,
+    revertDir: reverts,
   });
   const fm = read(v, "a.md");
   assert.equal(fm.status, "draft");
@@ -147,6 +163,7 @@ test("no-op (already-satisfied ops) produces zero changes", () => {
 
 test("hard-excluded folders are not touched", () => {
   const v = tmpVault();
+  const reverts = tmpReverts();
   write(v, ".obsidian/workspace.md", { status: "draft" });
   write(v, "a.md", { status: "draft" });
   const result = runBulkUpdate({
@@ -154,6 +171,7 @@ test("hard-excluded folders are not touched", () => {
     match: {},
     ops: { setFields: { status: "done" } },
     apply: true,
+    revertDir: reverts,
   });
   assert.equal(result.matched, 1);
   assert.equal(read(v, ".obsidian/workspace.md").status, "draft");
@@ -167,6 +185,7 @@ test("throws when no operations specified", () => {
 
 test("frontmatter filter matches field equality", () => {
   const v = tmpVault();
+  const reverts = tmpReverts();
   write(v, "a.md", { status: "draft" });
   write(v, "b.md", { status: "active" });
   const result = runBulkUpdate({
@@ -174,6 +193,7 @@ test("frontmatter filter matches field equality", () => {
     match: { frontmatter: { status: "draft" } },
     ops: { setFields: { status: "archived" } },
     apply: true,
+    revertDir: reverts,
   });
   assert.equal(result.matched, 1);
   assert.equal(read(v, "a.md").status, "archived");

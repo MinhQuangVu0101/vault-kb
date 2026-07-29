@@ -332,7 +332,36 @@ export function runBulkRevert({ config, bundleId, apply = false, force = false, 
     applied: false, bundleId: chosen.id, vaultMatch, driftCheck,
     willRestore, drifted, missing, unreadable, availableBundles,
   };
-  return view;
+  if (!apply) return view;
+
+  // Apply-time guards.
+  if (bundleVaultRoot !== null && bundleVaultRoot !== vaultRoot) {
+    throw new Error(`Bundle ${chosen.id} belongs to a different vault (${bundleVaultRoot}); refusing to apply.`);
+  }
+  if (bundleVaultRoot === null && !force) {
+    throw new Error(`Bundle ${chosen.id} has no vault identity; re-run with force:true to apply it here.`);
+  }
+  if (driftCheck === "unavailable" && !force) {
+    throw new Error(`Bundle ${chosen.id} predates drift tracking; re-run with force:true for a blind restore.`);
+  }
+
+  // Write the pre-revert (redo) bundle FIRST so the revert is itself undoable.
+  const redoEntries = restorePlans.map(({ rel, current, nextData }) => ({
+    path: rel, frontmatter: current, after: nextData,
+  }));
+  const revertFile = redoEntries.length
+    ? writeRevertBundle(redoEntries, { vaultRoot, revertDir: dir })
+    : null;
+
+  let written = 0;
+  for (const { abs, nextData, content } of restorePlans) {
+    fs.writeFileSync(abs, matter.stringify(content, nextData), "utf8");
+    written += 1;
+  }
+
+  logger?.info({ event: "bulk_revert", bundleId: chosen.id, restored: written, revertFile });
+
+  return { ...view, applied: true, revertFile, restored: willRestore.map((w) => w.path) };
 }
 
 /**

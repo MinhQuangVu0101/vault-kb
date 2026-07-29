@@ -29,7 +29,7 @@ Captured against the bundled demo vault (`test/fixture/demo-vault/`) — 8 notes
 
 - Only notes with `ai-access: true` in frontmatter are indexed.
 - Folders in `hardExcludedFolders` are never touched (defaults: `.obsidian`, `.obsidian-mobile`, `.git`, `.stversions`, `.trash`).
-- The MCP server is read-mostly: write tools (`kb_bulk_update`) require explicit `apply: true` and always produce a revert bundle.
+- The MCP server is read-mostly: write tools (`kb_bulk_update`, `kb_bulk_revert`) require explicit `apply: true` and always produce a revert bundle, so every write is undoable.
 - The SQLite index is local — no network calls except optional Ollama on `127.0.0.1`.
 - The web UI loads Inter Variable from Google Fonts (cached after first load). Replace the `@import` in `public/style.css` to use a system font or self-host if you'd rather not.
 
@@ -137,6 +137,7 @@ The watcher picks up the change within ~300 ms. Without `ai-access: true` the no
 | `kb_ingest` | Rebuild the index |
 | `kb_stats` | Index health, watcher state, embedding coverage |
 | `kb_bulk_update` | Batch frontmatter edits (dry-run by default, revert bundle written) |
+| `kb_bulk_revert` | Undo a `kb_bulk_update` from its revert bundle (field-level, dry-run by default) |
 | `kb_suggest_links` | Top-N similar but un-linked notes, with LLM-generated one-line reason |
 | `kb_related` | Top-N similar notes (no link-graph filter) |
 | `kb_orphans` | Notes with no incoming and no outgoing resolved links |

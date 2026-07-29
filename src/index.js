@@ -391,7 +391,7 @@ server.registerTool("kb_bulk_update", {
 
 server.registerTool("kb_bulk_revert", {
   title: "Revert a bulk frontmatter update",
-  description: "Undo a kb_bulk_update by restoring frontmatter from its revert bundle. Reverts the newest bundle for this vault by default, or a specific one via bundleId. Field-level: only the keys the bulk edit changed are restored, so later edits to other keys survive. Dry-run unless apply=true. Notes changed since the edit are skipped and reported as drifted unless force=true. Writes a new revert bundle so the revert is itself undoable.",
+  description: "Undo a kb_bulk_update by restoring frontmatter from its revert bundle. Reverts the newest bundle for this vault by default, or a specific one via bundleId. Field-level: only the keys the bulk edit changed are restored, so later edits to other keys survive. Dry-run unless apply=true. Notes changed since the edit are skipped and reported as drifted unless force=true. If anything is restored, writes a new revert bundle so the revert is itself undoable.",
   inputSchema: {
     bundleId: z.string().optional(),
     apply: z.boolean().optional(),

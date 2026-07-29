@@ -4,6 +4,9 @@ All notable changes to vault-kb. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+### Added
+- `kb_bulk_revert` - undo a `kb_bulk_update` by restoring frontmatter from its revert bundle. Reverts the newest bundle for the current vault by default, or a specific one via `bundleId`; dry-run unless `apply: true`. Restore is field-level (only the keys the bulk edit changed), so later edits to other keys survive. Notes whose frontmatter changed since the edit are skipped and reported as `drifted` unless `force: true`. Bundles now record the vault root and cannot be applied to a different vault, and a revert that restores anything writes its own bundle, so it too is undoable.
+
 ### Fixed
 - Wikilinks and filenames are now compared in one Unicode form (NFC). macOS reports filenames NFD-decomposed while links in note bodies are typed NFC, so every note whose name contains an umlaut or accent was reported as a false positive by `kb_dead_links` (link "broken" although the file exists) and `kb_orphans` (note "orphaned" although it is linked). Index keys are NFC-normalized in `normalizeRelativeVaultPath`, the link resolver canonicalizes both sides, and file access falls back to the NFD form on byte-strict filesystems (Linux).
 - `.base` files (Obsidian Bases) are now valid wikilink targets. `[[Freelance.base]]` no longer shows up as a dead link; ingest records `*.base` paths in a new `link_targets` table (hard-excluded folders stay excluded) that the resolver consults alongside notes. Requires one `kb_ingest` run after updating so the table gets populated.

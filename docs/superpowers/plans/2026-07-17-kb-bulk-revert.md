@@ -95,6 +95,11 @@ In `src/bulk.js`, after the existing `import { normalizeRelativeVaultPath } from
  */
 export function stableStringify(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  // gray-matter parses unquoted YAML dates into Date objects. typeof is
+  // "object" and Object.keys() is empty, so without this every Date would
+  // collapse to "{}". JSON.stringify's form also makes a Date compare equal
+  // to its post-round-trip ISO string, which is how bundles store it.
+  if (value instanceof Date) return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
   const keys = Object.keys(value).sort();
   return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(",")}}`;

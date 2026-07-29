@@ -354,3 +354,51 @@ test("v1 bundle requires force to apply", () => {
   assert.equal(res.applied, true);
   assert.equal(matter(fs.readFileSync(path.join(v, "a.md"), "utf8")).data.status, "orig");
 });
+
+test(
+  "apply: when the note write fails, the redo bundle was already durably written",
+  {
+    skip: typeof process.getuid === "function" && process.getuid() === 0
+      ? "chmod-based write failure cannot be verified as root (root bypasses permission bits)"
+      : false,
+  },
+  () => {
+    const { v, reverts } = bulkThenSetup({ status: "draft" }, { setFields: { status: "archived" } });
+    const notePath = path.join(v, "a.md");
+    const beforeFiles = new Set(listBundles(reverts).map((b) => b.file));
+    // Readable (runBulkRevert can still build its restore plan), but not writable, so the
+    // note-write step - and only that step - fails with EACCES.
+    fs.chmodSync(notePath, 0o444);
+    try {
+      assert.throws(
+        () => runBulkRevert({ config: mkConfig(v), revertDir: reverts, apply: true }),
+        /EACCES/,
+      );
+      const afterBundles = listBundles(reverts);
+      const newBundles = afterBundles.filter((b) => !beforeFiles.has(b.file));
+      // The redo bundle must exist on disk despite the note write throwing: under the
+      // correct ordering it is written before any note is touched, so a crash here still
+      // leaves a way back.
+      assert.equal(newBundles.length, 1);
+      const redo = JSON.parse(fs.readFileSync(newBundles[0].file, "utf8"));
+      assert.equal(redo.schema, 2);
+      assert.equal(redo.entries[0].frontmatter.status, "archived"); // pre-revert state
+      assert.equal(redo.entries[0].after.status, "draft");          // state the revert was about to write
+    } finally {
+      fs.chmodSync(notePath, 0o644); // let temp-dir cleanup remove the file
+    }
+  },
+);
+
+test("apply refuses a bundle from a different vault even with force: true", () => {
+  const { reverts } = bulkThenSetup({ status: "draft" }, { setFields: { status: "archived" } });
+  const other = tmpDir("vault-kb-other-force-");
+  writeNote(other, "a.md", { status: "archived" });
+  const bundleId = listBundles(reverts)[0].id;
+  // Unlike the "no vault identity" and "driftCheck unavailable" guards, the cross-vault
+  // guard must have no force escape: writing another vault's paths here is never safe.
+  assert.throws(
+    () => runBulkRevert({ config: mkConfig(other), revertDir: reverts, apply: true, force: true, bundleId }),
+    /different vault/,
+  );
+});

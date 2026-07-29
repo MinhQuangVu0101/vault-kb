@@ -10,7 +10,7 @@ import { createLogger } from "./logger.js";
 import { createStats } from "./stats.js";
 import { VaultIndex } from "./vault-index.js";
 import { createWatcher } from "./watcher.js";
-import { runBulkUpdate } from "./bulk.js";
+import { runBulkUpdate, runBulkRevert } from "./bulk.js";
 import { createEmbedder } from "./embeddings.js";
 import { createWebServer } from "./web.js";
 import { suggestLinks } from "./suggest-links.js";
@@ -385,6 +385,22 @@ server.registerTool("kb_bulk_update", {
   const result = runBulkUpdate({ config, match, ops, apply: Boolean(apply), logger });
   if (apply && result.matched > 0) {
     for (const { path: p } of result.changes) vaultIndex.ingestOne(p);
+  }
+  return toolText(JSON.stringify(result, null, 2));
+}));
+
+server.registerTool("kb_bulk_revert", {
+  title: "Revert a bulk frontmatter update",
+  description: "Undo a kb_bulk_update by restoring frontmatter from its revert bundle. Reverts the newest bundle for this vault by default, or a specific one via bundleId. Field-level: only the keys the bulk edit changed are restored, so later edits to other keys survive. Dry-run unless apply=true. Notes changed since the edit are skipped and reported as drifted unless force=true. Writes a new revert bundle so the revert is itself undoable.",
+  inputSchema: {
+    bundleId: z.string().optional(),
+    apply: z.boolean().optional(),
+    force: z.boolean().optional(),
+  },
+}, wrapTool("kb_bulk_revert", async ({ bundleId, apply, force }) => {
+  const result = runBulkRevert({ config, bundleId, apply: Boolean(apply), force: Boolean(force), logger });
+  if (apply && result.restored?.length) {
+    for (const p of result.restored) vaultIndex.ingestOne(p);
   }
   return toolText(JSON.stringify(result, null, 2));
 }));

@@ -6,6 +6,35 @@ import matter from "gray-matter";
 
 import { normalizeRelativeVaultPath } from "./config.js";
 
+/**
+ * Canonical JSON: object keys sorted recursively, array order preserved.
+ * @param {any} value
+ * @returns {string}
+ */
+export function stableStringify(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(",")}}`;
+}
+
+/**
+ * Keys whose values differ between two frontmatter objects (by stableStringify).
+ * @param {Record<string, any>} before
+ * @param {Record<string, any>} after
+ * @returns {string[]}
+ */
+export function changedKeys(before, after) {
+  const b = before ?? {};
+  const a = after ?? {};
+  const keys = new Set([...Object.keys(b), ...Object.keys(a)]);
+  const out = [];
+  for (const k of keys) {
+    if (stableStringify(b[k]) !== stableStringify(a[k])) out.push(k);
+  }
+  return out;
+}
+
 const REVERT_DIR = path.join(os.homedir(), ".cache", "vault-kb", "reverts");
 
 function normalizeTag(t) {

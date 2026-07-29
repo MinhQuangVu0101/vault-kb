@@ -7,7 +7,7 @@ import path from "node:path";
 import matter from "gray-matter";
 
 import { stableStringify, changedKeys } from "../src/bulk.js";
-import { runBulkUpdate, nextRevertId } from "../src/bulk.js";
+import { runBulkUpdate, nextRevertId, listBundles } from "../src/bulk.js";
 
 function tmpDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -94,4 +94,31 @@ test("nextRevertId suffixes past existing bundle files", () => {
   const seen = new Set(["/d/revert-ID.json", "/d/revert-ID-1.json"]);
   assert.equal(nextRevertId("/d", "ID", (f) => seen.has(f)), "ID-2");
   assert.equal(nextRevertId("/d", "FRESH", () => false), "FRESH");
+});
+
+test("listBundles returns empty for a missing dir", () => {
+  const missing = path.join(os.tmpdir(), "vault-kb-nope-" + process.pid);
+  assert.deepEqual(listBundles(missing), []);
+});
+
+test("listBundles reads metadata and sorts by id ascending", () => {
+  const reverts = tmpDir("vault-kb-list-");
+  fs.writeFileSync(path.join(reverts, "revert-2026-01-01T00-00-00-000Z.json"),
+    JSON.stringify({ schema: 2, id: "2026-01-01T00-00-00-000Z", createdAt: "2026-01-01T00:00:00.000Z", vaultRoot: "/v", entries: [{ path: "a.md", frontmatter: {}, after: {} }] }));
+  fs.writeFileSync(path.join(reverts, "revert-2026-02-01T00-00-00-000Z.json"),
+    JSON.stringify({ schema: 2, id: "2026-02-01T00-00-00-000Z", createdAt: "2026-02-01T00:00:00.000Z", vaultRoot: "/v", entries: [] }));
+  const bundles = listBundles(reverts);
+  assert.equal(bundles.length, 2);
+  assert.equal(bundles[0].id, "2026-01-01T00-00-00-000Z");
+  assert.equal(bundles[1].id, "2026-02-01T00-00-00-000Z");
+  assert.equal(bundles[0].notes, 1);
+  assert.equal(bundles[0].vaultRoot, "/v");
+});
+
+test("listBundles marks a corrupt bundle instead of throwing", () => {
+  const reverts = tmpDir("vault-kb-corrupt-");
+  fs.writeFileSync(path.join(reverts, "revert-bad.json"), "{ not json");
+  const bundles = listBundles(reverts);
+  assert.equal(bundles.length, 1);
+  assert.equal(bundles[0].corrupt, true);
 });

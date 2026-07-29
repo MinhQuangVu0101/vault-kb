@@ -170,6 +170,41 @@ function writeRevertBundle(entries, { vaultRoot, revertDir = REVERT_DIR }) {
 }
 
 /**
+ * Enumerate revert bundles by basename. Never throws on a corrupt sibling.
+ * @param {string} [revertDir]
+ * @returns {Array<{ id: string, file: string, schema: number|null, vaultRoot: string|null, createdAt: string|null, notes: number, corrupt?: boolean }>}
+ */
+export function listBundles(revertDir = REVERT_DIR) {
+  let files;
+  try {
+    files = fs.readdirSync(revertDir).filter((f) => /^revert-.*\.json$/.test(f));
+  } catch (err) {
+    if (err && err.code === "ENOENT") return [];
+    throw err;
+  }
+  const bundles = [];
+  for (const f of files) {
+    const stem = f.replace(/^revert-/, "").replace(/\.json$/, "");
+    const file = path.join(revertDir, f);
+    try {
+      const data = JSON.parse(fs.readFileSync(file, "utf8"));
+      bundles.push({
+        id: typeof data.id === "string" ? data.id : stem,
+        file,
+        schema: typeof data.schema === "number" ? data.schema : 1,
+        vaultRoot: typeof data.vaultRoot === "string" ? data.vaultRoot : null,
+        createdAt: typeof data.createdAt === "string" ? data.createdAt : null,
+        notes: Array.isArray(data.entries) ? data.entries.length : 0,
+      });
+    } catch {
+      bundles.push({ id: stem, file, schema: null, vaultRoot: null, createdAt: null, notes: 0, corrupt: true });
+    }
+  }
+  bundles.sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+  return bundles;
+}
+
+/**
  * @param {{
  *   config?: any,
  *   match?: { paths?: string[], folder?: string, tag?: string, frontmatter?: Record<string, any> },

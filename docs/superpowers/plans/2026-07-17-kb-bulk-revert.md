@@ -992,7 +992,7 @@ to:
 - [ ] **Step 4: Full health run**
 
 Run: `npm run typecheck && npm test`
-Expected: typecheck exit 0; all tests pass (130 existing + the new bulk-revert suite, 0 fail).
+Expected: typecheck exit 0; all tests pass (138 existing + the new bulk-revert suite, 0 fail).
 
 - [ ] **Step 5: Commit**
 

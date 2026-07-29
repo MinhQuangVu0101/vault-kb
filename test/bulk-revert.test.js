@@ -251,3 +251,43 @@ test("default selects newest bundle; bundleId targets an older one", () => {
   assert.equal(older.bundleId, oldId);
   assert.ok("a" in older.willRestore[0].diff);
 });
+
+test("dry-run reports vaultMatch: false for a foreign vault, true for the current vault", () => {
+  // Hand-write a schema-2 bundle recorded against a DIFFERENT vault than `config`:
+  const v = tmpDir("vault-kb-vaultmatch-");
+  const otherVault = tmpDir("vault-kb-othervault-");
+  const reverts = tmpDir("vault-kb-vaultmatch-store-");
+  writeNote(v, "a.md", { status: "archived" });
+  const foreignId = "2026-01-01T00-00-00-000Z";
+  fs.writeFileSync(path.join(reverts, `revert-${foreignId}.json`), JSON.stringify({
+    schema: 2, id: foreignId, createdAt: "2026-01-01T00:00:00.000Z", vaultRoot: otherVault,
+    entries: [{ path: "a.md", frontmatter: { status: "draft" }, after: { status: "archived" } }],
+  }));
+  const foreign = runBulkRevert({ config: mkConfig(v), revertDir: reverts, bundleId: foreignId });
+  assert.equal(foreign.vaultMatch, false);
+
+  // bulkThenSetup records vaultRoot = the vault it just edited, so a dry-run against
+  // that same vault should report a match:
+  const { v: ownVault, reverts: ownReverts } = bulkThenSetup({ status: "draft" }, { setFields: { status: "archived" } });
+  const own = runBulkRevert({ config: mkConfig(ownVault), revertDir: ownReverts });
+  assert.equal(own.vaultMatch, true);
+});
+
+test("v1 legacy bundle dry-run: driftCheck unavailable, vaultMatch null, whole-object restore diff", () => {
+  const v = tmpDir("vault-kb-v1-dryrun-");
+  const reverts = tmpDir("vault-kb-v1-dryrun-store-");
+  writeNote(v, "a.md", { status: "archived" }); // current on-disk state left by the unrecorded edit
+  const id = "2026-01-01T00-00-00-000Z";
+  // Genuine v1 shape: `ts` not `id`/`createdAt`, no `schema`, no `vaultRoot`, entries have
+  // `frontmatter` only (no `after`), so drift cannot be computed.
+  const v1Bundle = { ts: "2026-01-01T00-00-00-000Z", entries: [{ path: "a.md", frontmatter: { status: "draft" } }] };
+  fs.writeFileSync(path.join(reverts, `revert-${id}.json`), JSON.stringify(v1Bundle));
+  // v1 bundles are invisible to default selection (schema !== 2), so an explicit bundleId
+  // whose stem matches the filename is required to reach this bundle at all.
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts, bundleId: id });
+  assert.equal(res.driftCheck, "unavailable");
+  assert.equal(res.vaultMatch, null);
+  assert.equal(res.willRestore.length, 1);
+  assert.equal(res.willRestore[0].path, "a.md");
+  assert.deepEqual(res.willRestore[0].diff.status, { before: "archived", after: "draft" });
+});

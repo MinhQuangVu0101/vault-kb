@@ -122,3 +122,18 @@ test("listBundles marks a corrupt bundle instead of throwing", () => {
   assert.equal(bundles.length, 1);
   assert.equal(bundles[0].corrupt, true);
 });
+
+test("listBundles reports a legacy v1 bundle as schema 1", () => {
+  const reverts = tmpDir("vault-kb-v1-legacy-");
+  const v1Bundle = { ts: "2025-05-01T00-00-00-000Z", entries: [{ path: "a.md", frontmatter: { status: "orig" } }] };
+  fs.writeFileSync(path.join(reverts, "revert-v1-legacy-id.json"), JSON.stringify(v1Bundle));
+  const bundles = listBundles(reverts);
+  assert.equal(bundles.length, 1);
+  const entry = bundles[0];
+  assert.equal(entry.schema, 1);
+  assert.equal(entry.id, "v1-legacy-id");
+  assert.equal(entry.vaultRoot, null);
+  assert.equal(entry.createdAt, null);
+  assert.equal(entry.notes, 1);
+  assert.equal(entry.corrupt, undefined);
+});

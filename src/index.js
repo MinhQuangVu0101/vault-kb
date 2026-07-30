@@ -391,7 +391,7 @@ server.registerTool("kb_bulk_update", {
 
 server.registerTool("kb_bulk_revert", {
   title: "Revert a bulk frontmatter update",
-  description: "Undo a kb_bulk_update by restoring frontmatter from its revert bundle. Reverts the newest bundle for this vault by default, or a specific one via bundleId. Field-level: only the keys the bulk edit changed are restored, so later edits to other keys survive. Dry-run unless apply=true. Notes changed since the edit are skipped and reported as drifted unless force=true. If anything is restored, writes a new revert bundle so the revert is itself undoable.",
+  description: "Undo a kb_bulk_update by restoring frontmatter from its revert bundle. By default reverts the newest kb_bulk_update bundle for this vault; bundles written by a revert itself are never picked by default, so redoing a revert takes an explicit bundleId (the response returns it as redoBundleId). Field-level: only the keys the bulk edit changed are restored, so later edits to other keys survive. Dry-run unless apply=true. Notes whose frontmatter changed since the bulk edit are skipped and reported as drifted; force=true restores them anyway and overwrites those newer changes. On a legacy bundle (listed as legacyBundles, no drift data) force=true also replaces the whole frontmatter object instead of individual keys, dropping every key added since the edit. If anything is restored, writes a new revert bundle so the revert is itself undoable.",
   inputSchema: {
     bundleId: z.string().optional(),
     apply: z.boolean().optional(),

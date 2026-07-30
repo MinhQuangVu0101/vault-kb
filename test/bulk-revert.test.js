@@ -138,6 +138,15 @@ test("listBundles reports a legacy v1 bundle as schema 1", () => {
   assert.equal(entry.corrupt, undefined);
 });
 
+test("listBundles defaults a schema-2 bundle without `origin` to bulk_update", () => {
+  const reverts = tmpDir("vault-kb-origin-default-");
+  // Written before `origin` existed. Revert did not exist then either, so the only thing
+  // that can have produced it is a bulk update.
+  fs.writeFileSync(path.join(reverts, "revert-2026-01-01T00-00-00-000Z.json"),
+    JSON.stringify({ schema: 2, id: "2026-01-01T00-00-00-000Z", createdAt: "2026-01-01T00:00:00.000Z", vaultRoot: "/v", entries: [] }));
+  assert.equal(listBundles(reverts)[0].origin, "bulk_update");
+});
+
 function bulkThenSetup(fm, ops) {
   const v = tmpDir("vault-kb-rev-");
   const reverts = tmpDir("vault-kb-rev-store-");
@@ -252,6 +261,95 @@ test("default selects newest bundle; bundleId targets an older one", () => {
   assert.ok("a" in older.willRestore[0].diff);
 });
 
+test("a schema-2 bundle without `origin` is still selectable by default", () => {
+  const v = tmpDir("vault-kb-noorigin-");
+  const reverts = tmpDir("vault-kb-noorigin-store-");
+  writeNote(v, "a.md", { status: "archived" });
+  const id = "2026-01-01T00-00-00-000Z";
+  fs.writeFileSync(path.join(reverts, `revert-${id}.json`), JSON.stringify({
+    schema: 2, id, createdAt: "2026-01-01T00:00:00.000Z", vaultRoot: v, // no `origin`
+    entries: [{ path: "a.md", frontmatter: { status: "draft" }, after: { status: "archived" } }],
+  }));
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.equal(res.bundleId, id);
+  assert.equal(res.willRestore.length, 1);
+});
+
+test("empty case with only revert-origin bundles names them and points at redoBundleId", () => {
+  const v = tmpDir("vault-kb-redo-only-");
+  const reverts = tmpDir("vault-kb-redo-only-store-");
+  writeNote(v, "a.md", { status: "draft" });
+  const id = "2026-01-01T00-00-00-000Z";
+  fs.writeFileSync(path.join(reverts, `revert-${id}.json`), JSON.stringify({
+    schema: 2, id, createdAt: "2026-01-01T00:00:00.000Z", origin: "bulk_revert", vaultRoot: v,
+    entries: [{ path: "a.md", frontmatter: { status: "archived" }, after: { status: "draft" } }],
+  }));
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.equal(res.bundleId, null); // not selected by default
+  assert.deepEqual(res.availableBundles, []);
+  assert.equal(res.redoBundleId, id); // but reachable
+  assert.match(res.message, /redoBundleId/);
+  // Explicit id still reaches it and previews the redo:
+  const explicit = runBulkRevert({ config: mkConfig(v), revertDir: reverts, bundleId: id });
+  assert.equal(explicit.bundleId, id);
+  assert.deepEqual(explicit.willRestore[0].diff.status, { before: "draft", after: "archived" });
+});
+
+test("with only legacy bundles, they are listed and the message says how to reach them", () => {
+  const v = tmpDir("vault-kb-legacy-only-");
+  const reverts = tmpDir("vault-kb-legacy-only-store-");
+  writeNote(v, "a.md", { status: "archived" });
+  for (const id of ["2026-01-01T00-00-00-000Z", "2026-01-02T00-00-00-000Z"]) {
+    fs.writeFileSync(path.join(reverts, `revert-${id}.json`),
+      JSON.stringify({ ts: id, entries: [{ path: "a.md", frontmatter: { status: "draft" } }] }));
+  }
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.equal(res.bundleId, null);
+  assert.deepEqual(res.availableBundles, []);
+  assert.equal(res.legacyBundlesTotal, 2);
+  assert.equal(res.legacyBundles.length, 2);
+  assert.equal(res.legacyBundles[0].id, "2026-01-02T00-00-00-000Z"); // newest first
+  assert.equal(res.legacyBundles[0].notes, 1);
+  // Not a bare "nothing to revert": the route to these bundles is in the message.
+  assert.match(res.message, /bundleId/);
+  assert.match(res.message, /force: true/);
+});
+
+test("availableBundles is capped at the newest 10, availableBundlesTotal keeps the true count", () => {
+  const v = tmpDir("vault-kb-cap-");
+  const reverts = tmpDir("vault-kb-cap-store-");
+  writeNote(v, "a.md", { n: 12 });
+  for (let i = 1; i <= 12; i += 1) {
+    const day = String(i).padStart(2, "0");
+    const id = `2026-01-${day}T00-00-00-000Z`;
+    fs.writeFileSync(path.join(reverts, `revert-${id}.json`), JSON.stringify({
+      schema: 2, id, createdAt: `2026-01-${day}T00:00:00.000Z`, origin: "bulk_update", vaultRoot: v,
+      entries: [{ path: "a.md", frontmatter: { n: i - 1 }, after: { n: i } }],
+    }));
+  }
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.equal(res.availableBundlesTotal, 12);
+  assert.equal(res.availableBundles.length, 10);
+  assert.equal(res.availableBundles[0].id, "2026-01-12T00-00-00-000Z"); // newest first
+  assert.equal(res.availableBundles[9].id, "2026-01-03T00-00-00-000Z"); // the two oldest are dropped
+  assert.equal(res.bundleId, "2026-01-12T00-00-00-000Z"); // default selection unaffected by the cap
+});
+
+test("legacyBundles is capped at the newest 10, legacyBundlesTotal keeps the true count", () => {
+  const v = tmpDir("vault-kb-legacy-cap-");
+  const reverts = tmpDir("vault-kb-legacy-cap-store-");
+  for (let i = 1; i <= 11; i += 1) {
+    const day = String(i).padStart(2, "0");
+    const id = `2026-02-${day}T00-00-00-000Z`;
+    fs.writeFileSync(path.join(reverts, `revert-${id}.json`),
+      JSON.stringify({ ts: id, entries: [{ path: "a.md", frontmatter: { status: "draft" } }] }));
+  }
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.equal(res.legacyBundlesTotal, 11);
+  assert.equal(res.legacyBundles.length, 10);
+  assert.equal(res.legacyBundles[0].id, "2026-02-11T00-00-00-000Z");
+});
+
 test("dry-run reports vaultMatch: false for a foreign vault, true for the current vault", () => {
   // Hand-write a schema-2 bundle recorded against a DIFFERENT vault than `config`:
   const v = tmpDir("vault-kb-vaultmatch-");
@@ -273,6 +371,36 @@ test("dry-run reports vaultMatch: false for a foreign vault, true for the curren
   assert.equal(own.vaultMatch, true);
 });
 
+test("dry-run against a foreign-vault bundle plans nothing and explains why, without throwing", () => {
+  const v = tmpDir("vault-kb-foreign-dry-");
+  const otherVault = tmpDir("vault-kb-foreign-other-");
+  const reverts = tmpDir("vault-kb-foreign-dry-store-");
+  // The same relative path exists in both vaults, which is the normal case (Inbox.md,
+  // README.md). Its current value even matches the foreign bundle's `after`, so without
+  // an early return the loop would report a plausible restore that apply always refuses.
+  writeNote(v, "Inbox.md", { status: "archived" });
+  const foreignId = "2026-01-01T00-00-00-000Z";
+  fs.writeFileSync(path.join(reverts, `revert-${foreignId}.json`), JSON.stringify({
+    schema: 2, id: foreignId, createdAt: "2026-01-01T00:00:00.000Z", origin: "bulk_update", vaultRoot: otherVault,
+    entries: [{ path: "Inbox.md", frontmatter: { status: "draft" }, after: { status: "archived" } }],
+  }));
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts, bundleId: foreignId });
+  assert.equal(res.applied, false);
+  assert.equal(res.vaultMatch, false);
+  assert.deepEqual(res.willRestore, []);
+  assert.deepEqual(res.drifted, []);
+  assert.deepEqual(res.missing, []);
+  assert.deepEqual(res.unreadable, []);
+  assert.match(res.message, /different vault/);
+  assert.ok(res.message.includes(otherVault)); // names the vault it belongs to
+  assert.equal(matter(fs.readFileSync(path.join(v, "Inbox.md"), "utf8")).data.status, "archived"); // untouched
+  // Apply still refuses, unchanged:
+  assert.throws(
+    () => runBulkRevert({ config: mkConfig(v), revertDir: reverts, bundleId: foreignId, apply: true }),
+    /different vault/,
+  );
+});
+
 test("v1 legacy bundle dry-run: driftCheck unavailable, vaultMatch null, whole-object restore diff", () => {
   const v = tmpDir("vault-kb-v1-dryrun-");
   const reverts = tmpDir("vault-kb-v1-dryrun-store-");
@@ -290,6 +418,27 @@ test("v1 legacy bundle dry-run: driftCheck unavailable, vaultMatch null, whole-o
   assert.equal(res.willRestore.length, 1);
   assert.equal(res.willRestore[0].path, "a.md");
   assert.deepEqual(res.willRestore[0].diff.status, { before: "archived", after: "draft" });
+});
+
+test("v1 whole-object restore clears a key added after the recorded edit", () => {
+  const v = tmpDir("vault-kb-v1-wholeobj-");
+  const reverts = tmpDir("vault-kb-v1-wholeobj-store-");
+  // `added` is absent from the bundle's recorded frontmatter, i.e. it appeared after the
+  // recorded edit. The v1 path restores the whole object, so it must be cleared; a
+  // field-level restore would leave it in place.
+  writeNote(v, "a.md", { status: "archived", added: "later" });
+  const id = "2026-01-01T00-00-00-000Z";
+  fs.writeFileSync(path.join(reverts, `revert-${id}.json`),
+    JSON.stringify({ ts: id, entries: [{ path: "a.md", frontmatter: { status: "draft" } }] }));
+  const dry = runBulkRevert({ config: mkConfig(v), revertDir: reverts, bundleId: id });
+  assert.equal(dry.willRestore.length, 1);
+  assert.deepEqual(dry.willRestore[0].diff.status, { before: "archived", after: "draft" });
+  assert.deepEqual(dry.willRestore[0].diff.added, { before: "later", after: null }); // cleared
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts, bundleId: id, apply: true, force: true });
+  assert.equal(res.applied, true);
+  const fm = matter(fs.readFileSync(path.join(v, "a.md"), "utf8")).data;
+  assert.equal(fm.status, "draft");
+  assert.equal("added" in fm, false); // whole-object, not field-level
 });
 
 test("apply restores frontmatter and re-index is caller's job", () => {
@@ -318,6 +467,45 @@ test("apply writes a new schema-2 redo bundle before touching files", () => {
   assert.equal(redo.schema, 2);
   assert.equal(redo.entries[0].frontmatter.status, "archived"); // pre-revert state
   assert.equal(redo.entries[0].after.status, "draft");          // restored state
+});
+
+test("bundles record who wrote them: bulk_update from an edit, bulk_revert from a revert", () => {
+  const { v, reverts, up } = bulkThenSetup({ status: "draft" }, { setFields: { status: "archived" } });
+  assert.equal(JSON.parse(fs.readFileSync(up.revertFile, "utf8")).origin, "bulk_update");
+  const res = runBulkRevert({ config: mkConfig(v), revertDir: reverts, apply: true });
+  assert.equal(JSON.parse(fs.readFileSync(res.revertFile, "utf8")).origin, "bulk_revert");
+});
+
+test("after an apply, the default no longer selects the redo bundle but names it as redoBundleId", () => {
+  const { v, reverts, up } = bulkThenSetup({ status: "draft" }, { setFields: { status: "archived" } });
+  const updateId = JSON.parse(fs.readFileSync(up.revertFile, "utf8")).id;
+  const applied = runBulkRevert({ config: mkConfig(v), revertDir: reverts, apply: true });
+  const redoId = JSON.parse(fs.readFileSync(applied.revertFile, "utf8")).id;
+  assert.notEqual(redoId, updateId);
+  const second = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.equal(second.bundleId, updateId);   // the redo bundle is newer but not selectable
+  assert.equal(second.redoBundleId, redoId); // one explicit call away, not lost
+  assert.equal(second.willRestore.length, 0);
+});
+
+test("repeating the default-argument apply does not redo the bulk edit", () => {
+  const { v, reverts } = bulkThenSetup({ status: "draft" }, { setFields: { status: "archived" } });
+  runBulkRevert({ config: mkConfig(v), revertDir: reverts, apply: true });
+  // A client retrying after an ambiguous result must not flip the vault back to the edited
+  // state, which is what selecting the newly written redo bundle would do.
+  const again = runBulkRevert({ config: mkConfig(v), revertDir: reverts, apply: true });
+  assert.deepEqual(again.restored, []);
+  assert.equal(matter(fs.readFileSync(path.join(v, "a.md"), "utf8")).data.status, "draft");
+});
+
+test("an explicit redoBundleId redoes the reverted edit", () => {
+  const { v, reverts } = bulkThenSetup({ status: "draft" }, { setFields: { status: "archived" } });
+  runBulkRevert({ config: mkConfig(v), revertDir: reverts, apply: true });
+  const { redoBundleId } = runBulkRevert({ config: mkConfig(v), revertDir: reverts });
+  assert.ok(redoBundleId);
+  const redo = runBulkRevert({ config: mkConfig(v), revertDir: reverts, apply: true, bundleId: redoBundleId });
+  assert.equal(redo.applied, true);
+  assert.equal(matter(fs.readFileSync(path.join(v, "a.md"), "utf8")).data.status, "archived");
 });
 
 test("force restores a drifted note", () => {

@@ -4,6 +4,8 @@ All notable changes to vault-kb. Format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-31
+
 ### Added
 - `kb_bulk_revert` - undo a `kb_bulk_update` by restoring frontmatter from its revert bundle. Reverts the newest `kb_bulk_update` bundle for the current vault by default, or a specific one via `bundleId`; dry-run unless `apply: true`. Restore is field-level (only the keys the bulk edit changed), so later edits to other keys survive. Notes whose frontmatter changed since the edit are skipped and reported as `drifted`; `force: true` restores them anyway and overwrites those newer changes, and on a legacy bundle it replaces the whole frontmatter object instead of individual keys, dropping every key added since the edit. Bundles now record the vault root and cannot be applied to a different vault, and a revert that restores anything writes its own bundle, so it too is undoable. Bundles a revert wrote are never selected by default, because a repeated default call would otherwise redo the edit it just undid; redoing takes an explicit `bundleId`, returned in every response as `redoBundleId`.
 
@@ -18,6 +20,7 @@ All notable changes to vault-kb. Format follows [Keep a Changelog](https://keepa
 
 ### Security
 - Bumped transitive dependencies via `npm audit fix` (hono, @hono/node-server, fast-uri, ip-address, express-rate-limit, js-yaml, qs), clearing 7 advisories (2 high). Lockfile-only change.
+- Second bump for advisories disclosed while this release was in progress (@hono/node-server via the MCP SDK, body-parser, fast-uri), clearing 4 more (1 high). Lockfile-only change. `npm audit` reports 0 at release.
 
 ## [0.3.2] - 2026-06-19
 
@@ -79,6 +82,8 @@ Initial public release on npm. Captures everything shipped through Phase 1 (Foun
 - Semantic search requires a running Ollama instance and a pulled embedding model (`ollama pull nomic-embed-text`). Without it, keyword + fuzzy search still work.
 - `better-sqlite3` is a native module; first install compiles on systems without a prebuild.
 
+[0.4.0]: https://github.com/MinhQuangVu0101/vault-kb/releases/tag/v0.4.0
+[0.3.2]: https://github.com/MinhQuangVu0101/vault-kb/releases/tag/v0.3.2
 [0.3.1]: https://github.com/MinhQuangVu0101/vault-kb/releases/tag/v0.3.1
 [0.3.0]: https://github.com/MinhQuangVu0101/vault-kb/releases/tag/v0.3.0
 [0.2.0]: https://github.com/MinhQuangVu0101/vault-kb/releases/tag/v0.2.0
